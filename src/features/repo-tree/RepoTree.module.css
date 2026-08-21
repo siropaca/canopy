@@ -1,0 +1,26 @@
+/* モックの .treepane に対応する */
+.pane {
+  display: flex;
+  min-height: 0;
+  flex: 0 0 var(--pane-width, 360px);
+  flex-direction: column;
+  outline: none;
+}
+
+.scroll {
+  flex: 1;
+}
+
+.empty {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+.message {
+  margin: 0;
+  color: var(--disabled);
+  text-align: center;
+}

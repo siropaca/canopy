@@ -1,0 +1,13 @@
+/* モックの .splitter に合わせる */
+.splitter {
+  flex: 0 0 5px;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  cursor: col-resize;
+}
+
+.splitter:hover,
+.splitter.dragging {
+  border-right-color: var(--head-selfoc);
+  background: var(--head-selfoc);
+}

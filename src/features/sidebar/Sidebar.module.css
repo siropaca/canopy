@@ -1,0 +1,55 @@
+/* モックの .strip に対応する */
+.strip {
+  display: flex;
+  flex: 0 0 36px;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  gap: 2px;
+}
+
+.button {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--icon);
+}
+
+.button:hover {
+  background: var(--hover);
+  color: var(--fg-strong);
+}
+
+.button svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.button.active {
+  border: 1px solid var(--on-border);
+  background: var(--on);
+  color: var(--fg-strong);
+}
+
+.button.off {
+  color: var(--disabled);
+  cursor: default;
+}
+
+.button.off:hover {
+  background: transparent;
+  color: var(--disabled);
+}
+
+.divider {
+  width: 20px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border2);
+}

@@ -1,0 +1,28 @@
+/*
+ * 細いスクロールバー。見た目の狙いは docs/design-system.md の「スクロール」。
+ *
+ * **`--os-*` は「つまみの要素そのもの」に当てないと効かない。**
+ * overlayscrollbars は `.os-scrollbar` 自身で `--os-size: 0` を宣言しているので、
+ * 親から継承させようとすると幅 0 のまま出てこない (実測)。
+ * `theme` オプションにこの `.theme` クラスを渡して、直接当てている。
+ *
+ * つまみの色はトークンを足さずに `--dim` の濃さで作る。
+ * モックには自前スクロールバーが無く、トークンはモックと 1:1 で揃える必要がある
+ * (docs/design-system.md)。
+ */
+.area {
+  min-height: 0;
+}
+
+.theme {
+  --os-size: 10px;
+  --os-padding-perpendicular: 2px;
+  --os-padding-axis: 2px;
+  --os-handle-border-radius: 5px;
+  --os-handle-min-size: 24px;
+  --os-handle-interactive-area-offset: 4px;
+  --os-track-bg: transparent;
+  --os-handle-bg: color-mix(in srgb, var(--dim) 45%, transparent);
+  --os-handle-bg-hover: color-mix(in srgb, var(--dim) 70%, transparent);
+  --os-handle-bg-active: var(--dim);
+}

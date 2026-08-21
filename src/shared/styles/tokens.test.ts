@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { ROW_HEIGHT } from "./rowHeight";
+
 const MOCK = fileURLToPath(new URL("../../../docs/mock/tree.tmpl.html", import.meta.url));
 const TOKENS = fileURLToPath(new URL("./tokens.css", import.meta.url));
 const DESIGN_SYSTEM = fileURLToPath(new URL("../../../docs/design-system.md", import.meta.url));
@@ -14,11 +16,23 @@ const TOKEN_NAMES = [
   "--head",
   "--border",
   "--border2",
+  "--head-line",
+  "--overlay-line",
+  "--on",
+  "--on-border",
   "--fg",
   "--dim",
+  "--faint",
+  "--disabled",
+  "--fg-strong",
+  "--fg-mid",
+  "--nohit",
   "--hover",
   "--sel",
   "--selfoc",
+  "--head-sel",
+  "--head-selfoc",
+  "--head-nohit",
   "--track",
   "--ahead",
   "--wt",
@@ -26,6 +40,31 @@ const TOKEN_NAMES = [
   "--dirty",
   "--gone",
   "--folder",
+  "--icon",
+  "--track-bg",
+  "--track-fg",
+  "--ahead-bg",
+  "--ahead-fg",
+  "--dirty-bg",
+  "--badge-bg",
+  "--badge-fg",
+  "--del",
+  "--err",
+  "--err-line",
+  "--out",
+  "--out-dim",
+  "--graph",
+  "--menu-key",
+  "--btn",
+  "--btn-hover",
+  "--btn-border",
+  "--btn-face",
+  "--accent",
+  "--accent-hover",
+  "--danger",
+  "--danger-hover",
+  "--danger-face",
+  "--danger-fg",
   "--row",
 ] as const;
 
@@ -175,5 +214,9 @@ describe("デザイントークン", () => {
 
   it("トークンの名前が想定どおり揃っている", () => {
     expect(Object.keys(mock).sort()).toEqual([...TOKEN_NAMES].sort());
+  });
+
+  it("仮想化に渡す行高が --row と一致する", () => {
+    expect(mock["--row"]).toBe(`${ROW_HEIGHT}px`);
   });
 });

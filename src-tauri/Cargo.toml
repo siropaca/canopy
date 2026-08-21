@@ -19,5 +19,20 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+# フォルダ選択ダイアログ。パスをフロントに渡さずに追加するため Rust 側から開く
+# (docs/specs/git-operations.md の add_repo)
+tauri-plugin-dialog = "2"
+# 子プロセスと排他。同期の Command を使わない (docs/adr/0009-concurrency-and-refresh.md)。
+# macros は try_join! に要る。dev-dependencies だけに書くと、cargo test では通って
+# 本体のビルドだけが落ちる (docs/pitfalls.md)
+tokio = { version = "1", features = ["macros", "process", "sync"] }
 # Rust の struct から TypeScript の型を生成する (docs/adr/0013-type-generation.md)
 ts-rs = "12"
+
+[dev-dependencies]
+# 統合テストは実物の git を一時ディレクトリで叩く (docs/testing.md)
+tempfile = "3"
+# mock_builder でコマンドのハンドラ集合を検証する (docs/adr/0013-type-generation.md)
+tauri = { version = "2", features = ["test"] }
+# #[tokio::test]
+tokio = { version = "1", features = ["rt-multi-thread"] }

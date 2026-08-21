@@ -1,0 +1,39 @@
+/* モックの .dirtyw / .tkw / .gone / .wtm に合わせる */
+.dirty,
+.track,
+.worktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 7px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.dirty {
+  color: var(--dirty);
+}
+
+.behind {
+  color: var(--track);
+}
+
+.ahead {
+  color: var(--ahead);
+}
+
+.gone {
+  margin-left: 7px;
+  color: var(--gone);
+}
+
+.worktree {
+  color: var(--wt);
+}
+
+.worktreeName {
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

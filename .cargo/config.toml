@@ -2,3 +2,6 @@
 # force を付けない。scripts/check-generated.sh が環境変数で上書きして比較するため
 [env]
 TS_RS_EXPORT_DIR = "../src/ipc/generated"
+# i64 / u64 を bigint ではなく number にする。
+# Tauri の IPC は JSON なので実行時は number で届く。bigint と宣言すると型が嘘になる
+TS_RS_LARGE_INT = "number"

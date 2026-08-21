@@ -1,0 +1,12 @@
+/* 仮想リストの器。高さと位置だけ JSX から渡す (VirtualRows.tsx) */
+.sizer {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}

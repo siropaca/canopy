@@ -1,0 +1,49 @@
+/*
+ * アイコンの色と寸法。形は icons.tsx。
+ * 既定の寸法と stroke は shared/styles/reset.css の svg 指定に乗る。
+ */
+.chevron {
+  color: var(--dim);
+}
+
+.chevron.closed {
+  transform: rotate(-90deg);
+}
+
+.spacer {
+  display: inline-block;
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+}
+
+.folder {
+  color: var(--folder);
+}
+
+.branch {
+  color: var(--icon);
+}
+
+.current {
+  color: var(--cur);
+  stroke-width: 1.2;
+}
+
+.tag {
+  color: var(--icon);
+}
+
+.worktree {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  color: var(--wt);
+}
+
+.arrow {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  stroke-width: 1.35;
+}

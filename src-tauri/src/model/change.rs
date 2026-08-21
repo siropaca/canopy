@@ -21,6 +21,15 @@ pub struct ChangeList {
     pub total: u32,
 }
 
+impl ChangeList {
+    /// How many items ride along on the IPC.
+    ///
+    /// UI は 20 件しか出さないので 21 件に切って総数を別に渡す。
+    /// `.gitignore` を整える前のリポジトリでは `git status` が数千行返る
+    /// (docs/specs/data-model.md)。
+    pub const MAX_ITEMS: usize = 21;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,6 +61,14 @@ mod tests {
                 "total": 1
             })
         );
+    }
+
+    /// UI は 20 件しか出さないので 21 件に切る。
+    /// **フロントの `FILE_LIMIT` (20) + 1 と揃える。**
+    /// ずれると `他 n 件` の n が実際と合わなくなる (docs/specs/data-model.md)
+    #[test]
+    fn caps_items_one_above_what_the_ui_shows() {
+        assert_eq!(ChangeList::MAX_ITEMS, 21);
     }
 
     fn sample() -> ChangeList {

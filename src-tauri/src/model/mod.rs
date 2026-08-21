@@ -3,9 +3,23 @@
 //! The shape is defined in docs/specs/data-model.md.
 //! TypeScript types are generated from these structs (docs/adr/0013-type-generation.md).
 
+mod branch;
 mod change;
+mod head;
+mod reference;
+mod registration;
+mod snapshot;
+mod ui_state;
+mod worktree;
 
+pub use branch::Branch;
 pub use change::{Change, ChangeList};
+pub use head::{Head, HeadKind};
+pub use reference::Ref;
+pub use registration::{AddRepoOutcome, RepoRegistration};
+pub use snapshot::RepoSnapshot;
+pub use ui_state::{DEFAULT_PANE_WIDTH, UiState, WindowState};
+pub use worktree::Worktree;
 
 /// Assert that every key serde emits also appears in the generated TypeScript
 /// declaration.

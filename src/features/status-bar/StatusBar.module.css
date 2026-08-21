@@ -1,0 +1,39 @@
+/* モックの .status に対応する */
+.bar {
+  display: flex;
+  height: 20px;
+  align-items: center;
+  gap: 13px;
+  padding: 0 7px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.behind,
+.ahead,
+.dirty,
+.worktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.behind {
+  color: var(--track);
+}
+
+.ahead {
+  color: var(--ahead);
+}
+
+.dirty {
+  color: var(--dirty);
+}
+
+.worktree {
+  color: var(--wt);
+}

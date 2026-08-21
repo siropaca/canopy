@@ -1,4 +1,9 @@
+pub mod commands;
+pub mod git;
 pub mod model;
+pub mod queue;
+pub mod state;
+pub mod store;
 
 /// Whether the WebView may navigate to `url`.
 ///
@@ -24,10 +29,38 @@ fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .build()
 }
 
+/// Every command the frontend may call.
+///
+/// `run()` から切り出しているのは、統合テストが `tauri::test::mock_builder()` に
+/// 同じ集合を渡せるようにするため。コマンドのラッパは手書きなので、引数名の
+/// 間違いは型では防げない (docs/adr/0013-type-generation.md)。
+pub fn invoke_handler<R: tauri::Runtime>()
+-> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        commands::repo::list_repos,
+        commands::repo::get_ui_state,
+        commands::repo::save_ui_state,
+        commands::repo::add_repo,
+        commands::repo::remove_repo,
+        commands::repo::get_repo_snapshot,
+    ]
+}
+
 /// Start the Tauri application.
 pub fn run() {
     tauri::Builder::default()
         .plugin(navigation_guard())
+        // フォルダ選択は Rust 側から開く。フロントには権限を与えない
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(invoke_handler())
+        .setup(|app| {
+            let settings = tauri::Manager::path(app)
+                .app_config_dir()
+                .expect("the app config directory should be known")
+                .join(state::SETTINGS_FILE);
+            tauri::Manager::manage(app, state::AppState::load(settings));
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("failed to start the Tauri application");
 }

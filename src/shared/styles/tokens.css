@@ -5,19 +5,33 @@
  * それぞれの用途は docs/design-system.md にある。
  */
 :root {
-  /* 面 */
+  /* 面と境界 */
   --bg: #1e1f22;
   --panel: #2b2d30;
   --head: #3b3e43;
   --border: #393b40;
   --border2: #4a4d51;
+  --head-line: #222426;
+  --overlay-line: #35383d;
+  --on: #43464b;
+  --on-border: #55585e;
 
-  /* 文字と状態の背景 */
+  /* 文字 */
   --fg: #dfe1e5;
   --dim: #6f737a;
+  --faint: #54585e;
+  --disabled: #4a4d51;
+  --fg-strong: #fff;
+  --fg-mid: #b4b8be;
+  --nohit: #787c82;
+
+  /* 選択とホバー */
   --hover: #2f3134;
   --sel: #3c3f41;
   --selfoc: #2e436e;
+  --head-sel: #4a4e54;
+  --head-selfoc: #3d5a94;
+  --head-nohit: #33363a;
 
   /* 意味の色 */
   --track: #548af7;
@@ -27,6 +41,35 @@
   --dirty: #e8a33d;
   --gone: #9a5f5f;
   --folder: #9aa0a6;
+  --icon: #9aa0a6;
+
+  /* バッジと出力 */
+  --track-bg: #26364f;
+  --track-fg: #7ba7f5;
+  --ahead-bg: #2b3d2e;
+  --ahead-fg: #8ec98e;
+  --dirty-bg: #4a3c22;
+  --badge-bg: #4a4d51;
+  --badge-fg: #cfd2d6;
+  --del: #c96a6a;
+  --err: #c9534b;
+  --err-line: #e06c6c;
+  --out: #c8ccd2;
+  --out-dim: #7d8188;
+  --graph: #3a4c6d;
+  --menu-key: #cbd5ea;
+
+  /* ボタン */
+  --btn: #365880;
+  --btn-hover: #3f6294;
+  --btn-border: #4b6eaf;
+  --btn-face: #3a3d42;
+  --accent: #4b83f0;
+  --accent-hover: #5a8ef4;
+  --danger: #a4453f;
+  --danger-hover: #b8504a;
+  --danger-face: #5a3535;
+  --danger-fg: #f0d4d4;
 
   /* 寸法 */
   --row: 21px;

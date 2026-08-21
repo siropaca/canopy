@@ -1,0 +1,152 @@
+/* モックの .detail に対応する */
+.pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.body {
+  padding: 9px 11px;
+}
+
+.placeholder {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--disabled);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin-bottom: 11px;
+  color: var(--dim);
+}
+
+.pairs {
+  display: grid;
+  margin-bottom: 13px;
+  gap: 0 8px;
+  grid-template-columns: 96px 1fr;
+}
+
+.pairs dt {
+  color: var(--dim);
+}
+
+.pairs dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+}
+
+.none {
+  color: var(--dim);
+}
+
+.gone {
+  color: var(--gone);
+}
+
+.dirty {
+  color: var(--dirty);
+}
+
+.difference {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.behind,
+.ahead {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.behind {
+  color: var(--track);
+}
+
+.ahead {
+  color: var(--ahead);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.actions .primary {
+  border-color: var(--btn-border);
+  background: var(--btn);
+  color: var(--fg-strong);
+}
+
+.actions .primary:hover {
+  background: var(--btn-hover);
+}
+
+.actions .danger:hover {
+  background: var(--danger-face);
+  color: var(--danger-fg);
+}
+
+.section {
+  margin: 16px 0 4px;
+  color: var(--dim);
+}
+
+.files .file {
+  display: flex;
+  height: var(--row);
+  align-items: center;
+  gap: 8px;
+}
+
+.status {
+  flex: 0 0 20px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  text-align: center;
+}
+
+.modified {
+  color: var(--dirty);
+}
+
+.added {
+  color: var(--ahead);
+}
+
+.deleted {
+  color: var(--del);
+}
+
+.renamed {
+  color: var(--track);
+}
+
+.other {
+  color: var(--dim);
+}
+
+.path {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.more {
+  color: var(--disabled);
+}

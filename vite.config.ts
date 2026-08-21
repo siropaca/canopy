@@ -36,8 +36,23 @@ export default defineConfig({
     target: "safari17",
     sourcemap: true,
   },
+  // 環境はファイルの拡張子で分ける。純粋関数は node、描画は jsdom。
+  // environmentMatchGlobs は Vitest 4 で消えていて、書いても無警告で無視される
   test: {
-    environment: "node",
-    include: ["src/**/*.test.{ts,tsx}"],
+    projects: [
+      {
+        extends: true,
+        test: { name: "node", environment: "node", include: ["src/**/*.test.ts"] },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/test/setup-dom.ts"],
+        },
+      },
+    ],
   },
 });

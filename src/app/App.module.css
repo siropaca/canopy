@@ -1,3 +1,12 @@
+/* 画面の枠。モックの .main / .split に対応する */
 .app {
+  display: flex;
   height: 100%;
+  flex-direction: column;
+}
+
+.split {
+  display: flex;
+  min-height: 0;
+  flex: 1;
 }

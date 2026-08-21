@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "main ウィンドウに許可する権限。フロントは今のところ invoke も listen もしないので空。使う機能が出たフェーズで必要な分だけ足す (docs/security.md)",
+  "description": "main ウィンドウに許可する権限。空でよい。自前のコマンド (#[tauri::command]) はローカル origin なら ACL を通らないので、invoke していても許可は要らない (docs/security.md の「IPC の境界」)。plugin と core: のコマンドを使う機能が出たフェーズで、必要な分だけ足す",
   "windows": ["main"],
   "permissions": []
 }

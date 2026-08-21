@@ -59,7 +59,9 @@ export default tseslint.config(
   {
     files: ["src/shared/**"],
     rules: {
-      "no-restricted-imports": [
+      // 型だけの import を許すために typescript-eslint 版を使う
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -68,9 +70,12 @@ export default tseslint.config(
               message: "shared は app / features / store を知らない (docs/architecture.md)",
             },
             {
-              // generated (型だけ) は許す。invoke のラッパは禁止
+              // generated (型だけ) は許す。ipc/types.ts も型だけなので import type は許す。
+              // 実行時の import (invoke のラッパ) は禁止
               regex: "^@/ipc/(?!generated/)",
-              message: "shared は invoke を呼ばない。型は @/ipc/generated から取る",
+              message:
+                "shared は invoke を呼ばない。実行時に必要なら shared に上げる。型は import type で取る",
+              allowTypeImports: true,
             },
           ],
         },
