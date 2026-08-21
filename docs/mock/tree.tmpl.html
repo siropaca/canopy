@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Canopy</title>
+<style>
+:root{
+  --bg:#1e1f22; --panel:#2b2d30; --head:#3b3e43; --border:#393b40; --border2:#4a4d51;
+  --fg:#dfe1e5; --dim:#6f737a; --hover:#2f3134; --sel:#3c3f41; --selfoc:#2e436e;
+  --track:#548af7; --ahead:#62a85e; --wt:#b28fd0; --cur:#e8b73d; --dirty:#e8a33d; --gone:#9a5f5f; --folder:#9aa0a6;
+  --row:21px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);overflow:hidden;
+  font:13px/var(--row) -apple-system,"Helvetica Neue","Hiragino Sans",sans-serif;
+  -webkit-font-smoothing:antialiased;user-select:none}
+button{background:transparent;border:1px solid transparent;color:var(--dim);
+  font:inherit;padding:0 9px;height:22px;cursor:pointer;white-space:nowrap}
+button:hover{background:var(--hover);color:var(--fg)}
+button.on{background:var(--selfoc);color:#fff;border-color:#4b6eaf}
+button.pri{background:#365880;border-color:#4b6eaf;color:#fff}
+button.pri:hover{background:#3f6294}
+button.danger:hover{background:#5a3535;color:#f0d4d4}
+
+.qbar{position:sticky;top:0;z-index:5;background:var(--bg);
+  border-bottom:1px solid var(--border);padding:6px}
+.qbar input{width:100%;background:#1e1f22;border:1px solid var(--border2);color:var(--fg);
+  height:27px;padding:0 7px 0 25px;font:inherit;font-size:13px;outline:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236f737a' stroke-width='1.2'><circle cx='5' cy='5' r='3.2'/><path d='M7.5 7.5 10.5 10.5'/></svg>");
+  background-repeat:no-repeat;background-position:6px 50%;background-size:14px}
+.qbar input:focus{border-color:var(--track)}
+.dim{color:var(--dim)}
+.status{height:20px;line-height:20px;background:var(--panel);border-top:1px solid var(--border);
+  padding:0 7px;color:var(--dim);font-size:12px;display:flex;gap:13px;align-items:center}
+
+svg{width:13px;height:13px;flex:0 0 13px;fill:none;stroke:currentColor;
+  stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+svg.chev{color:var(--dim)}
+svg.chev.cl{transform:rotate(-90deg)}
+.ph{width:13px;height:13px;flex:0 0 13px;display:inline-block}
+svg.fo{color:var(--folder)} svg.br{color:#9aa0a6}
+svg.cu{color:var(--cur);stroke-width:1.2}
+svg.tg{color:#9aa0a6}
+svg.wti{color:var(--wt);width:11px;height:11px;flex:0 0 11px}
+svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
+
+.main{display:flex;flex-direction:column;height:calc(100vh - 20px)}
+.split{display:flex;flex:1;min-height:0}
+
+/* ---- コンソール ---- */
+.console{flex:0 0 230px;display:flex;flex-direction:column;min-height:0;
+  background:#1e1f22;border-top:1px solid var(--border2)}
+.console[hidden]{display:none}
+.console .ctabs{display:flex;align-items:center;gap:1px;height:26px;padding:0 4px;
+  background:var(--panel);border-bottom:1px solid var(--border);overflow-x:auto}
+.console .ctab{display:flex;align-items:center;gap:7px;height:22px;padding:0 8px;
+  color:var(--dim);white-space:nowrap;cursor:default;max-width:260px}
+.console .ctab:hover{background:var(--hover)}
+.console .ctab.on{background:#43464b;color:#fff}
+.console .ctab .nm2{overflow:hidden;text-overflow:ellipsis}
+.console .ctab .x{color:#6f737a;flex:0 0 auto}
+.console .ctab .x:hover{color:#fff}
+.console .ctab .dot{width:6px;height:6px;border-radius:50%;background:#c9534b;flex:0 0 6px}
+.console .sp2{flex:1}
+.console .ro{color:#54585e;font-size:11px;padding:0 6px}
+.console .ctitle{color:var(--dim);padding:0 8px}
+.console .close{display:flex;align-items:center;justify-content:center;width:20px;height:20px;
+  color:var(--dim);flex:0 0 20px}
+.console .close:hover{background:var(--hover);color:#fff}
+.console .close svg{width:12px;height:12px;flex:0 0 12px}
+.console .out{flex:1;overflow:auto;padding:6px 10px;user-select:text;
+  font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:19px;
+  white-space:pre-wrap;word-break:break-word}
+.console .out .cmd{color:#c8ccd2}
+.console .out .err{color:#e06c6c}
+.console .out .dim2{color:#7d8188}
+.console .empty2{color:#4a4d51;padding:8px 10px}
+.strip{flex:0 0 36px;background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;padding:5px 0;gap:2px}
+.strip .grow{flex:1}
+.strip .sb{width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;
+  color:#9aa0a6}
+.strip .sb:hover{background:var(--hover);color:#fff}
+.strip .sb.on{background:#43464b;color:#fff;border:1px solid #55585e}
+.strip .sb.off{color:#4a4d51}
+.strip .sb.off:hover{background:transparent;color:#4a4d51}
+.strip .sb svg{width:18px;height:18px;flex:0 0 18px}
+.strip .div{width:20px;height:1px;background:var(--border2);margin:4px 0}
+.tip{position:fixed;z-index:70;background:#3b3e43;border:1px solid var(--border2);
+  padding:2px 7px;font-size:12px;color:var(--fg);box-shadow:0 3px 10px rgba(0,0,0,.4);
+  pointer-events:none;white-space:nowrap}
+.treepane{flex:0 0 360px;overflow:auto;outline:none}
+.splitter{flex:0 0 5px;cursor:col-resize;border-right:1px solid var(--border);
+  background:transparent}
+.splitter:hover,.splitter.drag{background:#3d5a94;border-right-color:#3d5a94}
+.r{display:flex;align-items:center;gap:4px;height:var(--row);
+  padding-left:calc(5px + var(--d,0) * 13px);padding-right:7px;cursor:default}
+.r:hover{background:var(--hover)}
+.r.sel{background:var(--sel)}
+.treepane:focus .r.sel{background:var(--selfoc)}
+.r .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r .sp{flex:1}
+.r.repo{background:var(--head);color:#fff;font-weight:600;
+  border-top:1px solid var(--border2);border-bottom:1px solid #222426}
+.r.repo.sel{background:#4a4e54}
+.treepane:focus .r.repo.sel{background:#3d5a94}
+.r.repo.nohit{color:#787c82;background:#33363a}
+.r.repo.nohit .nm{font-weight:400}
+.r.repo.dragging{opacity:.45}
+.r.repo.dropbefore{box-shadow:inset 0 2px 0 var(--track)}
+.r.repo.dropafter{box-shadow:inset 0 -2px 0 var(--track)}
+
+.tkw{display:inline-flex;align-items:center;gap:3px;margin-left:7px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.tkw.dn{color:var(--track)}
+.tkw.up{color:var(--ahead)}
+.cnt{color:#54585e;font-size:12px}
+.gone{color:var(--gone)}
+.dirtyw{display:inline-flex;align-items:center;gap:3px;margin-left:7px;color:var(--dirty);
+  line-height:1;font-variant-numeric:tabular-nums}
+.wtm{display:inline-flex;align-items:center;gap:3px;margin-left:7px;color:var(--wt);
+  line-height:1}
+.wtm .wn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.badge{font-size:11px;padding:0 4px;background:#4a4d51;color:#cfd2d6;
+  display:inline-flex;align-items:center;gap:2px;line-height:1;height:16px;
+  font-variant-numeric:tabular-nums}
+.badge svg{width:10px;height:10px;flex:0 0 10px;stroke-width:1.5}
+.badge.d{background:#4a3c22;color:var(--dirty)}
+.badge.b{background:#26364f;color:#7ba7f5}
+.badge.a{background:#2b3d2e;color:#8ec98e}
+
+.detail{flex:1;overflow:auto;padding:9px 11px}
+.detail h1{font-size:15px;margin:0 0 2px;font-weight:600;display:flex;align-items:center;gap:5px}
+.detail .sub{color:var(--dim);margin-bottom:11px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:0 8px;margin-bottom:13px}
+.kv dt{color:var(--dim)} .kv dd{margin:0;overflow:hidden;text-overflow:ellipsis}
+.acts{display:flex;gap:4px;flex-wrap:wrap}
+.sec2{color:var(--dim);margin:16px 0 4px}
+.files .f{display:flex;align-items:center;gap:8px;height:var(--row)}
+.files .st{flex:0 0 20px;text-align:center;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.files .st.M{color:var(--dirty)} .files .st.A{color:var(--ahead)}
+.files .st.D{color:#c96a6a} .files .st.R{color:var(--track)}
+.files .st.U{color:#6f737a}
+.files .fp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files .more{color:#4a4d51}
+.acts button[disabled]{color:#4a4d51;cursor:default}
+.acts button[disabled]:hover{background:transparent;color:#4a4d51}
+.empty{height:100%;display:flex;align-items:center;justify-content:center;color:#4a4d51}
+
+.menu{position:fixed;z-index:50;background:#2b2d30;border:1px solid var(--border2);
+  box-shadow:0 6px 20px rgba(0,0,0,.5);padding:4px 0;min-width:230px;max-width:560px}
+.menu .mi{height:24px;line-height:24px;padding:0 11px;white-space:nowrap;cursor:default;
+  display:flex;align-items:center;gap:10px}
+.menu .mi:hover{background:var(--selfoc);color:#fff}
+.menu .mi .k{color:var(--dim);font-size:12px}
+.menu .mi .k.far{margin-left:auto}
+.menu .mi:hover .k{color:#cbd5ea}
+.menu .mi .v{margin-left:auto;color:var(--dim);font-size:12px;max-width:320px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.menu .mi:hover .v{color:#cbd5ea}
+.menu .mi .ar2{margin-left:auto;color:var(--dim)}
+.menu .mi.off{color:#54585e}
+.menu .mi.off:hover{background:transparent}
+.menu .hr{height:1px;background:var(--border);margin:4px 0}
+.menu .ttl{height:22px;line-height:22px;padding:0 11px;color:var(--dim);font-size:12px}
+
+.modal{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.4);
+  display:flex;align-items:flex-start;justify-content:center;padding-top:22vh}
+.modal[hidden]{display:none}
+.modal .box{background:#2b2d30;border:1px solid #4a4d51;border-radius:8px;
+  box-shadow:0 16px 44px rgba(0,0,0,.6);padding:0 0 14px;width:440px;overflow:hidden}
+.modal .box.wide{width:620px}
+.modal .tbar{display:flex;align-items:center;height:38px;padding:0 20px;
+  border-bottom:1px solid #35383d}
+.modal .tbar .t{font-weight:600}
+.modal .body{padding:14px 20px 0}
+.modal .frow{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px}
+.modal .frow label{color:var(--fg);text-align:right;white-space:nowrap}
+.modal input[type=text]{width:100%;height:30px;padding:0 8px;background:#1e1f22;
+  border:1px solid var(--border2);border-radius:4px;color:var(--fg);font:inherit;outline:none}
+.modal input[type=text]:focus{border-color:#4b83f0;box-shadow:0 0 0 1px #4b83f0}
+.modal .prow{display:flex;align-items:center;gap:7px;min-width:0}
+.modal .prow b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:42%;flex:0 1 auto}
+.modal .prow .rmt{color:var(--track);white-space:nowrap}
+.modal .prow .to{color:var(--dim);flex:0 0 auto}
+.modal .pinfo{color:var(--dim);margin-top:8px}
+.modal .clist{margin-top:8px;max-height:220px;overflow:auto}
+.modal .clist .c{display:flex;align-items:center;gap:9px;height:23px;position:relative}
+.modal .clist .c .dot{flex:0 0 7px;width:7px;height:7px;border-radius:50%;
+  background:var(--track);margin-left:2px}
+.modal .clist .c:not(:last-child)::before{content:"";position:absolute;left:5.5px;top:15px;
+  width:1px;height:15px;background:#3a4c6d}
+.modal .clist .c .h{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  flex:0 0 auto}
+.modal .clist .c .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modal .clist .none{color:#4a4d51}
+.modal .cbrow{display:flex;align-items:center;gap:8px;margin-top:14px}
+.modal .cbrow input{width:15px;height:15px;accent-color:#4b83f0;margin:0}
+.modal .cbrow .note{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.modal .btns button.warn,.modal .btns button.pri.warn{
+  background:#a4453f;border-color:#a4453f;color:#fff}
+.modal .btns button.warn:hover,.modal .btns button.pri.warn:hover{background:#b8504a}
+.modal .btns{display:flex;justify-content:flex-end;gap:8px;margin:16px 20px 0}
+.modal .btns button{height:30px;padding:0 16px;border-radius:5px;
+  border:1px solid var(--border2);color:var(--fg)}
+.modal .btns button:hover{background:#3a3d42}
+.modal .btns button.pri{background:#4b83f0;border-color:#4b83f0;color:#fff}
+.modal .btns button.pri:hover{background:#5a8ef4}
+.toast{position:fixed;right:12px;bottom:30px;z-index:60;display:flex;flex-direction:column;
+  gap:8px;align-items:flex-end}
+.toast .tst{display:flex;align-items:center;gap:11px;background:#3c3f41;border-radius:8px;
+  padding:11px 16px;min-width:300px;max-width:560px;
+  box-shadow:0 10px 28px rgba(0,0,0,.5)}
+.toast .tst .ico{flex:0 0 18px;width:18px;height:18px;border-radius:50%;background:#4b83f0;
+  color:#fff;font-size:12px;font-weight:700;line-height:18px;text-align:center}
+.toast .tst .msg{color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast .tst .cwd{color:#b4b8be}
+.toast .tst.err .ico{background:#c9534b}
+.toast .tst .lnk{color:#7ba7f5;margin-left:4px;cursor:default;white-space:nowrap}
+.toast .tst .lnk:hover{text-decoration:underline}
+.toast .tst code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<div class="main">
+<div class="split">
+  <div class="strip" id="strip">
+    <button class="sb off" data-v2 data-a="new-branch" data-tip="新規ブランチ">
+      <svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
+    <button class="sb off" data-v2 data-a="delete-branch" data-tip="ブランチの削除">
+      <svg viewBox="0 0 16 16"><path d="M3.5 4.8h9M6.2 4.8V3.2h3.6v1.6M5.2 4.8 6 13h4l.8-8.2"/></svg></button>
+    <button class="sb" data-a="fetch-strip" data-tip="フェッチ">
+      <svg viewBox="0 0 16 16"><path d="M13 3.5 5.6 10.9" stroke-dasharray="2.4 1.9"/><path d="M5.6 7.1v3.8h3.8"/></svg></button>
+    <button class="sb off" data-a="pull-selected" data-tip="選択対象をプル">
+      <svg viewBox="0 0 16 16"><path d="M13 3.5 5.6 10.9"/><path d="M5.6 7.1v3.8h3.8"/></svg></button>
+    <span class="div"></span>
+    <button class="sb" data-a="expand-local" data-tip="すべて展開 (ローカルのみ)">
+      <svg viewBox="0 0 16 16"><path d="M4.4 4.6 8 8.2l3.6-3.6"/><path d="M4.6 12h6.8"/></svg></button>
+    <button class="sb" data-a="expand-all" data-tip="すべて展開">
+      <svg viewBox="0 0 16 16"><path d="M4.4 6.6 8 3l3.6 3.6"/><path d="M4.4 9.4 8 13l3.6-3.6"/></svg></button>
+    <button class="sb" data-a="collapse-all" data-tip="すべて折りたたむ">
+      <svg viewBox="0 0 16 16"><path d="M4.4 3.4 8 7l3.6-3.6"/><path d="M4.4 12.6 8 9l3.6 3.6"/></svg></button>
+    <button class="sb on" data-a="toggle-group" data-tip="グループ化 ディレクトリ">
+      <svg viewBox="0 0 16 16"><path d="M2 12.6V3.4h4l1.4 2H14v7.2z"/>
+        <path d="M5.6 7.4v3.4M5.6 8.6h2.6M5.6 10.6h2.6"/></svg></button>
+    <button class="sb" data-a="toggle-local" data-tip="ローカルのみ表示">
+      <svg viewBox="0 0 16 16"><path d="M2.8 3.8h10.4v6.4H2.8z"/><path d="M1.4 12.4h13.2"/></svg></button>
+    <span class="div"></span>
+    <button class="sb" data-a="add-repo" data-tip="リポジトリを追加">
+      <svg viewBox="0 0 16 16"><path d="M2 12.6V3.4h4l1.4 2H14v7.2z"/><path d="M8 7.6v3.4M6.3 9.3h3.4"/></svg></button>
+    <button class="sb off" data-a="remove-repo" data-tip="リポジトリをリストから削除">
+      <svg viewBox="0 0 16 16"><path d="M2 12.6V3.4h4l1.4 2H14v7.2z"/><path d="M6.3 9.3h3.4"/></svg></button>
+    <span class="div"></span>
+    <button class="sb" data-a="toggle-console" data-tip="コンソール">
+      <svg viewBox="0 0 16 16"><path d="M2.2 3h11.6v10H2.2z"/>
+        <path d="M4.6 6.6 6.4 8.2 4.6 9.8M8.2 10h3"/></svg></button>
+  </div>
+  <div class="treepane" id="tree" tabindex="0">
+    <div class="qbar"><input id="q" placeholder="ブランチまたはタグ"></div>
+    <div id="rows"></div>
+  </div>
+  <div class="splitter" id="splitter"></div>
+  <div class="detail" id="detail"></div>
+</div>
+<div class="console" id="console" hidden>
+  <div class="ctabs" id="ctabs"></div>
+  <div class="out" id="cout" title="このビューは読み取り専用です"></div>
+</div>
+</div>
+<div class="status" id="status"></div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal" hidden><div class="box">
+  <div class="tbar"><span class="t" id="mttl"></span></div>
+  <div class="body" id="mbody"></div>
+  <div class="btns"><button id="mng">キャンセル</button>
+    <button class="pri" id="mok"></button></div>
+</div></div>
+
+<script>
+/*__DATA__*/
+
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const IC={
+  chev:o=>`<svg class="chev${o?"":" cl"}" viewBox="0 0 12 12"><path d="M3.4 4.7 6 7.4l2.6-2.7"/></svg>`,
+  ph:`<span class="ph"></span>`,
+  folder:`<svg class="fo" viewBox="0 0 12 12"><path d="M1.2 9.8V2.6h3.1l1.1 1.5h5.4v5.7z"/></svg>`,
+  branch:`<svg class="br" viewBox="0 0 12 12"><circle cx="3.6" cy="2.4" r="1.3"/><circle cx="3.6" cy="9.6" r="1.3"/><path d="M3.6 3.7v4.6"/><path d="M3.6 6h2.9a1.7 1.7 0 0 0 1.7-1.7V3.7"/><circle cx="8.2" cy="2.4" r="1.3"/></svg>`,
+  cur:`<svg class="cu" viewBox="0 0 12 12"><path d="M6.6 1.4h4v4l-5.1 5.1-4-4z"/><circle cx="8.7" cy="3.3" r=".95"/></svg>`,
+  tag:`<svg class="tg" viewBox="0 0 12 12"><path d="M1.5 6 5.2 2.2h5.3v7.6H5.2z"/><circle cx="8.2" cy="6" r=".95"/></svg>`,
+  wt:n=>`<span class="wtm"><svg class="wti" viewBox="0 0 12 12"><path d="M1.4 3.4h6.2v6.2H1.4z"/><path d="M4.4 3.4V1.4h6.2v6.2h-2"/></svg><span class="wn">${esc(n)}</span></span>`,
+  down:`<svg class="ar" viewBox="0 0 12 12"><path d="M9.3 2.7 4.2 7.8"/><path d="M4.2 5.2v2.6h2.6"/></svg>`,
+  up:`<svg class="ar" viewBox="0 0 12 12"><path d="M2.7 9.3 7.8 4.2"/><path d="M7.8 6.8V4.2H5.2"/></svg>`,
+};
+const TK=b=>(b.behind?`<span class="tkw dn">${IC.down}${b.behind}</span>`:"")
+          +(b.ahead?`<span class="tkw up">${IC.up}${b.ahead}</span>`:"");
+const behindSum=r=>r.local.reduce((a,b)=>a+(b.behind||0),0);
+const aheadSum=r=>r.local.reduce((a,b)=>a+(b.ahead||0),0);
+const wtOf=(r,n)=>r.wt.find(w=>w.b===n);
+const curOf=r=>r.local.find(b=>b.cur);
+const short=p=>p.replace(/^\/Users\/[^/]+/,"~");
+function fileList(files,limit){
+  const r={files};
+  if(!r.files.length) return "";
+  const cls=s=>({M:"M",A:"A",D:"D",R:"R"}[s[0]]||"U");
+  const rows=r.files.slice(0,limit).map(f=>
+    `<div class="f"><span class="st ${cls(f.s)}">${esc(f.s)}</span>
+      <span class="fp" title="${esc(f.p)}">${esc(f.p)}</span></div>`).join("");
+  const rest=r.files.length-Math.min(limit,r.files.length);
+  return `<div class="sec2">未コミットの変更 (${r.files.length})</div>
+    <div class="files">${rows}${rest>0?`<div class="f more">他 ${rest} 件</div>`:""}</div>`;
+}
+
+let q="", selId=null, dragName=null, grouping=true, localOnly=false;
+const flat=[];
+
+/* ---- 折りたたみ。キーはリポジトリ名ベース (並び替えても壊れない) ---- */
+const collapsed=new Set();
+let ALLKEYS=[];
+function folderKeys(rn,scope,items){
+  const set=new Set();
+  for(const it of items){
+    const p=it.name.split("/");
+    for(let i=1;i<p.length;i++) set.add(p.slice(0,i).join("/"));
+  }
+  return [...set].map(p=>`${rn}|${scope}|${p}`);
+}
+function indexKeys(){
+  ALLKEYS=[];
+  for(const r of D){
+    ALLKEYS.push(`${r.n}|repo|`,`${r.n}|local|`,`${r.n}|remote|`,`${r.n}|tag|`,
+      ...folderKeys(r.n,"local",r.local),...folderKeys(r.n,"remote",r.remote),
+      ...folderKeys(r.n,"tag",r.tags));
+  }
+}
+indexKeys();
+D.forEach(r=>{                              // リモートとタグは畳んでおく
+  collapsed.add(`${r.n}|remote|`); collapsed.add(`${r.n}|tag|`);
+  folderKeys(r.n,"remote",r.remote).forEach(k=>collapsed.add(k));
+  folderKeys(r.n,"tag",r.tags).forEach(k=>collapsed.add(k));
+});
+function under(key){
+  const [rn,scope,path]=key.split("|");
+  return ALLKEYS.filter(k=>{
+    if(k===key) return false;
+    const [rn2,scope2,path2]=k.split("|");
+    if(rn2!==rn) return false;
+    if(scope==="repo") return true;
+    if(scope2!==scope) return false;
+    return path===""?true:path2.startsWith(path+"/");
+  });
+}
+const setFold=(key,open)=>{
+  if(open) collapsed.delete(key);
+  else { collapsed.add(key); under(key).forEach(k=>collapsed.add(k)); }
+};
+const isOpen=k=>q?true:!collapsed.has(k);
+
+const hit=n=>!q||n.toLowerCase().includes(q);
+const hits=r=>r.local.filter(b=>hit(b.name)).length
+  +(localOnly?0:r.remote.filter(b=>hit(b.name)).length+r.tags.filter(t=>hit(t.name)).length);
+const repos=()=>D;
+
+/* ---------- ツリー ---------- */
+function build(items){
+  const root={dirs:new Map(),leaves:[]};
+  for(const it of items){
+    if(!hit(it.name)) continue;
+    if(!grouping){ root.leaves.push({...it,label:it.name}); continue; }  // 平坦に出す
+    const p=it.name.split("/");
+    let n=root;
+    for(const seg of p.slice(0,-1)){
+      if(!n.dirs.has(seg)) n.dirs.set(seg,{dirs:new Map(),leaves:[]});
+      n=n.dirs.get(seg);
+    }
+    n.leaves.push({...it,label:p.at(-1)});
+  }
+  return root;
+}
+const nLeaves=n=>n.leaves.length+[...n.dirs.values()].reduce((a,c)=>a+nLeaves(c),0);
+function section(r,scope,label,items){
+  if(!items.length) return "";                 // 無い括りは出さない
+  const key=`${r.n}|${scope}|`, t=build(items), n=nLeaves(t);
+  if(q&&!n) return "";
+  const open=isOpen(key);
+  return push(`<div class="r" style="--d:1">${IC.chev(open)}
+      <span class="nm">${label}</span></div>`,
+      {id:key,kind:"section",repo:r,key})
+    + (open?rows(r,scope,t,2,""):"");
+}
+const push=(html,meta)=>{ flat.push(meta); return html.replace("<div ",`<div data-i="${flat.length-1}" `); };
+
+function rows(r,scope,node,depth,prefix){
+  let h="";
+  for(const [name,child] of [...node.dirs.entries()].sort((a,b)=>a[0].localeCompare(b[0]))){
+    const key=`${r.n}|${scope}|${prefix}${name}`, open=isOpen(key);
+    h+=push(`<div class="r" style="--d:${depth}">${IC.chev(open)}${IC.folder}
+        <span class="nm">${esc(name)}</span></div>`,
+        {id:key,kind:"folder",repo:r,key});
+    if(open) h+=rows(r,scope,child,depth+1,`${prefix}${name}/`);
+  }
+  for(const b of node.leaves.sort((a,b)=>a.label.localeCompare(b.label))){
+    const icon=b.cur?IC.cur:scope==="tag"?IC.tag:IC.branch;
+    h+=push(`<div class="r" style="--d:${depth}">${IC.ph}${icon}
+        <span class="nm" title="${esc(b.name)}">${esc(b.label)}</span>
+        ${b.dirtyN?`<span class="dirtyw" title="未コミット ${b.dirtyN} ファイル">●${b.dirtyN}</span>`:""}${TK(b)}
+        ${b.gone?'<span class="gone">gone</span>':""}${b.wtName?IC.wt(b.wtName):""}</div>`,
+        {id:`${r.n}|${scope}|b|${b.name}`,kind:scope,repo:r,branch:b});
+  }
+  return h;
+}
+
+function render(){
+  flat.length=0;
+  let h="";
+  for(const r of repos()){
+    const key=`${r.n}|repo|`, open=isOpen(key), n=q?hits(r):1;
+    h+=push(`<div class="r repo${n?"":" nohit"}" draggable="true" data-repo="${esc(r.n)}" style="--d:0">
+      ${IC.chev(open)}<span class="nm">${esc(r.n)}</span><span class="sp"></span>
+      ${open?"":`${r.dirty?`<span class="badge d">●${r.dirty}</span>`:""}
+      ${behindSum(r)?`<span class="badge b">${IC.down}${behindSum(r)}</span>`:""}
+      ${aheadSum(r)?`<span class="badge a">${IC.up}${aheadSum(r)}</span>`:""}`}</div>`,
+      {id:key,kind:"repo",repo:r,key});
+    if(!open) continue;
+    h+=section(r,"local","ローカル",r.local.map(b=>{
+      const w=wtOf(r,b.name);
+      return {...b,wtPath:w?.p,wtName:w?w.p.split("/").pop():null,
+              dirtyN:b.cur?r.dirty:(w?w.dirty:0)};   // 作業ツリーごとの未コミット
+    }));
+    if(!localOnly){
+      h+=section(r,"remote","リモート",r.remote);
+      h+=section(r,"tag","タグ",r.tags);
+    }
+  }
+  rowsEl.innerHTML=h;
+  paintSel();
+  const nb=D.filter(r=>behindSum(r)>0).length;
+  document.getElementById("status").innerHTML=`
+    <span>${D.length} リポジトリ</span>
+    <span>ローカル ${D.reduce((a,r)=>a+r.local.length,0)} / リモート ${D.reduce((a,r)=>a+r.remote.length,0)}</span>
+    <span style="color:var(--track)">${IC.down} ${D.reduce((a,r)=>a+behindSum(r),0)} (${nb} repo)</span>
+    <span style="color:var(--ahead)">${IC.up} ${D.reduce((a,r)=>a+aheadSum(r),0)} (${D.filter(r=>aheadSum(r)>0).length} repo)</span>
+    <span style="color:var(--dirty)">未コミット ${D.filter(r=>r.dirty).length} repo</span>
+    <span style="color:var(--wt)">worktree ${D.reduce((a,r)=>a+r.wt.length,0)}</span>`;
+}
+
+function paintSel(){
+  rowsEl.querySelectorAll(".r.sel").forEach(el=>el.classList.remove("sel"));
+  const i=flat.findIndex(x=>x.id===selId);
+  if(i>=0) rowsEl.querySelector(`.r[data-i="${i}"]`)?.classList.add("sel");
+  // 選択に応じてサイドバーのボタンを有効・無効にする
+  const kind=flat[i]?.kind;
+  strip.querySelector('.sb[data-a="remove-repo"]')
+    ?.classList.toggle("off",kind!=="repo");
+  strip.querySelector('.sb[data-a="pull-selected"]')
+    ?.classList.toggle("off",!(kind==="repo"||kind==="local"));
+  renderDetail();
+}
+const setSel=(id,scroll)=>{
+  selId=id; paintSel();
+  if(scroll) tree.querySelector(".r.sel")?.scrollIntoView({block:"nearest"});
+};
+
+function renderDetail(){
+  const m=flat.find(x=>x.id===selId);
+  if(!m){ detail.innerHTML=`<div class="empty">ブランチを選択</div>`; return; }
+  const r=m.repo;
+  if(!m.branch){
+    detail.innerHTML=`<h1>${esc(r.n)}</h1><div class="sub">${esc(short(r.path))}</div>
+      <dl class="kv"><dt>origin</dt><dd>${esc(r.url)}</dd>
+      <dt>ブランチ</dt><dd>ローカル ${r.local.length} / リモート ${r.remote.length}</dd>
+      <dt>現在</dt><dd>${esc(curOf(r)?.name||"")}</dd>
+      <dt>未コミット</dt><dd>${r.dirty?`<span style="color:var(--dirty)">${r.dirty} ファイル</span>`:'<span class="dim">なし</span>'}</dd></dl>
+      <div class="acts"><button class="pri" data-a="fetch-repo">フェッチ</button>
+      <button data-a="pull-repo">プル</button>
+      <button data-a="copy-path">パスをコピー</button>
+      <button class="danger" data-a="remove-repo">リストから削除</button></div>
+      ${fileList(r.files,20)}`;
+    return;
+  }
+  const b=m.branch, w=wtOf(r,b.name), cur=curOf(r),
+        isLocal=m.kind==="local", isTag=m.kind==="tag";
+  const own=isLocal?(b.cur?r.files:(w?w.files:[])):[];   // このブランチの作業ツリーの変更
+  const dn=own.length;
+  detail.innerHTML=`
+    <h1>${isLocal&&b.cur?IC.cur:isTag?IC.tag:IC.branch}${esc(b.name)}</h1>
+    <div class="sub">${esc(r.n)}${isLocal&&b.cur?" — 現在のブランチ":""}</div>
+    <dl class="kv">
+      <dt>種別</dt><dd>${isLocal?"ローカル":isTag?"タグ":"リモート"}</dd>
+      <dt>追跡</dt><dd>${isLocal?(b.gone?`<span class="gone">origin/${esc(b.name)} (削除済み)</span>`:"origin/"+esc(b.name)):"—"}</dd>
+      <dt>差分</dt><dd>${TK(b)||'<span class="dim">最新</span>'}</dd>
+      <dt>最終コミット</dt><dd>${esc(b.date||"")}</dd>
+      ${w?`<dt>ワークツリー</dt><dd>${esc(w.p.split("/").pop())} <span class="dim">${esc(short(w.p))}</span></dd>`:""}
+      <dt>未コミット</dt><dd>${dn?`<span style="color:var(--dirty)">${dn} ファイル</span>`:'<span class="dim">なし</span>'}</dd>
+    </dl>
+    <div class="acts">
+      ${isTag
+        ? `<button class="pri" data-a="checkout-tag">チェックアウト</button>`
+        : isLocal&&b.cur
+        ? `<button class="pri" data-a="pull">プル</button>
+           <button data-a="push-branch">プッシュ</button>`
+        : `<button class="pri" data-a="checkout">チェックアウト</button>
+           <button data-a="checkout-update">チェックアウトとプル</button>
+           <button data-a="push-branch">プッシュ</button>`}
+      <button data-a="copy-branch">名前をコピー</button>
+    </div>
+    ${fileList(own,20)}`;
+}
+
+/* ---------- 実行 (モック) + コンソール ---------- */
+const logs=new Map();          // リポジトリ名 -> 出力行
+let cOpen=false, cTab=null;
+const failed=new Set();        // 失敗のあったタブ
+
+const stamp=()=>{
+  const d=new Date(), z=(n,w=2)=>String(n).padStart(w,"0");
+  return `${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}.${z(d.getMilliseconds(),3)}`;
+};
+function logTo(name,lines){
+  if(!logs.has(name)) logs.set(name,[]);
+  logs.get(name).push(...lines);
+  if(!cTab) cTab=name;
+}
+
+// 実データの状態から成否を決める (未コミットならプル失敗 / behind があればプッシュ拒否)
+function simulate(cmd,r){
+  const out=[];
+  const gh=(r?.url||"").replace("https://","").replace("github.com/","github.com:");
+  if(/^git fetch/.test(cmd)){
+    out.push(["dim2","remote: Enumerating objects: 24, done."],
+             ["dim2",`From ${gh}`],
+             ["dim2","   3f8a1c2..9b2e7d4  develop -> origin/develop"],["dim2","Done"]);
+    return {ok:true,out};
+  }
+  if(/git pull/.test(cmd)){
+    if(r && r.dirty>0){
+      out.push(["err","error: cannot pull with rebase: You have unstaged changes."],
+               ["err","error: Please commit or stash them."]);
+      return {ok:false,out,msg:"プルに失敗しました (未コミットの変更あり)"};
+    }
+    out.push(["dim2","Successfully rebased and updated refs/heads/develop."],["dim2","Done"]);
+    return {ok:true,out};
+  }
+  if(/git push/.test(cmd)){
+    const br=cmd.trim().split(/\s+/).pop();
+    const b=r?.local.find(x=>x.name===br);
+    if(b && b.behind>0 && !/--force/.test(cmd)){
+      out.push(["dim2",`To ${gh}`],
+               ["err",` ! [rejected]        ${br} -> ${br} (non-fast-forward)`],
+               ["err",`error: failed to push some refs to '${gh}'`],
+               ["dim2","hint: Updates were rejected because the tip of your current branch is behind."]);
+      return {ok:false,out,msg:"プッシュが拒否されました (リモートが先に進んでいます)"};
+    }
+    out.push(["dim2","Enumerating objects: 9, done."],
+             ["dim2",`To ${gh}`],
+             ["dim2",`   3f8a1c2..9b2e7d4  ${br} -> ${br}`],["dim2","Done"]);
+    return {ok:true,out};
+  }
+  if(/git checkout/.test(cmd)){
+    out.push(["dim2",`Switched to branch '${cmd.split(/\s+/)[2]}'`],["dim2","Done"]);
+    return {ok:true,out};
+  }
+  out.push(["dim2","Done"]);
+  return {ok:true,out};
+}
+
+function toastMsg({err,repo,text,link}){
+  const el=document.createElement("div");
+  el.className="tst"+(err?" err":"");
+  el.innerHTML=`<span class="ico">${err?"!":"i"}</span><div class="msg">${
+    repo?`<span class="cwd">${esc(repo)}</span> `:""}${text}${
+    link?`<span class="lnk" data-open="${esc(repo)}">詳細を見る</span>`:""}</div>`;
+  toast.prepend(el);
+  while(toast.children.length>6) toast.lastElementChild.remove();
+  setTimeout(()=>el.remove(),err?9000:4000);
+}
+
+function run(cmd,repo){
+  if(cmd.startsWith("#")){                       // git ではない擬似操作
+    toastMsg({repo,text:`<code>${esc(cmd)}</code>`});
+    return;
+  }
+  const r=D.find(x=>x.n===repo);
+  const res=simulate(cmd,r);
+  logTo(repo||"—",[["cmd",`${stamp()}: [${r?r.path:""}] ${cmd}`],...res.out]);
+  if(res.ok){
+    toastMsg({repo,text:`<code>${esc(cmd)}</code>`});
+  }else{
+    failed.add(repo||"—");
+    toastMsg({err:true,repo,text:esc(res.msg),link:true});
+  }
+  renderConsole();
+}
+
+function renderConsole(){
+  const el=document.getElementById("console");
+  el.hidden=!cOpen;
+  strip.querySelector('.sb[data-a="toggle-console"]')?.classList.toggle("on",cOpen);
+  if(!cOpen) return;
+  const names=[...logs.keys()];
+  if(!names.includes(cTab)) cTab=names[0]||null;
+  document.getElementById("ctabs").innerHTML=
+    (names.length?"":`<span class="ctitle">コンソール</span>`)+
+    names.map(n=>`<div class="ctab${n===cTab?" on":""}" data-tab="${esc(n)}">
+      ${failed.has(n)?'<span class="dot"></span>':""}
+      <span class="nm2">${esc(n)}</span><span class="x" data-close="${esc(n)}">✕</span></div>`).join("")
+    +`<span class="sp2"></span><span class="ro">読み取り専用</span>
+      <span class="close" id="cclose" title="コンソールを閉じる">
+        <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></span>`;
+  const out=document.getElementById("cout");
+  const lines=logs.get(cTab)||[];
+  out.innerHTML=lines.length
+    ? lines.map(([k,t])=>`<div class="${k}">${esc(t)}</div>`).join("")
+    : `<div class="empty2">出力はまだありません</div>`;
+  out.scrollTop=out.scrollHeight;
+}
+function act(a){
+  const m=flat.find(x=>x.id===selId);
+  const r=m?.repo, b=m?.branch, cur=r?curOf(r):null, R=r?r.n:"";
+  const n=b?b.name:"", local=b?b.name.replace(/^origin\//,""):"";
+  ({
+    checkout:()=>run(`git checkout ${local}`,R),
+    "checkout-tag":()=>run(`git checkout ${n}`,R),
+    "checkout-update":()=>run(`git checkout ${local} && git pull --rebase`,R),
+    pull:()=>run(`git pull --rebase`,R),
+    "rebase-onto":()=>run(`git rebase origin/${n}`,R),
+    "rebase-cur":()=>run(`git rebase ${n}${cur?" "+cur.name:""}`,R),
+    "fetch-repo":()=>run(`git fetch --prune`,R),
+    "fetch-all":()=>D.forEach(x=>run(`git fetch --prune`,x.n)),
+    "pull-repo":()=>run(`git pull --rebase`,R),
+    "copy-branch":()=>run(`# コピー: ${n}`,R),
+    "copy-path":()=>run(`# コピー: ${r.path}`,R),
+    "copy-name":()=>run(`# コピー: ${r.n}`,R),
+    "copy-url":()=>run(`# コピー: ${r.url}`,R),
+    reveal:()=>run(`open -R ${r.path}`,R),
+    terminal:()=>run(`# ターミナルで開く: ${r.path}`,R),
+    "pull-selected":()=>{
+      if(!b) return run(`git pull --rebase`,R);
+      if(m.kind==="local"&&b.cur) return run(`git pull --rebase`,R);
+      run(`git fetch origin ${local}:${local}`,R);       // チェックアウトせずに早送り
+    },
+    "push-branch":()=>openPush(m),
+    "fetch-strip":()=>r?run(`git fetch --prune`,R):D.forEach(x=>run(`git fetch --prune`,x.n)),
+    "toggle-group":()=>{
+      grouping=!grouping;
+      strip.querySelector('.sb[data-a="toggle-group"]').classList.toggle("on",grouping);
+      render();
+    },
+    "toggle-console":()=>{ cOpen=!cOpen; renderConsole(); },
+    "toggle-local":()=>{
+      localOnly=!localOnly;
+      strip.querySelector('.sb[data-a="toggle-local"]').classList.toggle("on",localOnly);
+      render();
+    },
+    "expand-all":()=>{ collapsed.clear(); render(); },
+    "expand-local":()=>{                       // リモートとタグは畳んだまま (初期状態)
+      collapsed.clear();
+      D.forEach(x=>{ collapsed.add(`${x.n}|remote|`); collapsed.add(`${x.n}|tag|`);
+        folderKeys(x.n,"remote",x.remote).forEach(k=>collapsed.add(k));
+        folderKeys(x.n,"tag",x.tags).forEach(k=>collapsed.add(k)); });
+      render();
+    },
+    "collapse-all":()=>{ collapsed.clear(); ALLKEYS.forEach(k=>collapsed.add(k)); render(); },
+    "add-repo":()=>run(`# フォルダを選択してリポジトリを追加`,""),
+    "remove-repo":()=>removeRepo(r),
+    "rename-branch":()=>openRename(m),
+  }[a]||(()=>{}))();
+}
+function removeRepo(r){
+  if(!r) return;
+  const i=D.findIndex(x=>x.n===r.n);
+  if(i<0) return;
+  D.splice(i,1); indexKeys(); selId=null;
+  run(`# リストから削除: ${r.n} (ディスクはそのまま)`,"");
+  render();
+}
+
+/* ---------- ダイアログ (共通) ---------- */
+let dlgOk=null;
+function openDialog({title,body,ok,onOk,focus,wide}){
+  document.querySelector("#modal .box").classList.toggle("wide",!!wide);
+  document.getElementById("mttl").textContent=title;
+  document.getElementById("mbody").innerHTML=body;
+  const okBtn=document.getElementById("mok");
+  okBtn.textContent=ok; okBtn.classList.remove("warn");
+  dlgOk=onOk;
+  document.getElementById("modal").hidden=false;
+  if(focus){ const el=document.getElementById(focus); el?.focus(); el?.select?.(); }
+}
+function closeDialog(){ document.getElementById("modal").hidden=true; dlgOk=null; }
+
+/* ブランチ名の変更 */
+function openRename(m){
+  const old=m.branch.name;
+  openDialog({
+    title:`ブランチ ${old} の名前変更`,
+    body:`<div class="frow"><label>ブランチ名:</label>
+      <input type="text" id="minput" value="${esc(old)}"></div>`,
+    ok:"名前の変更", focus:"minput",
+    onOk:()=>{
+      const nv=document.getElementById("minput").value.trim();
+      if(!nv||nv===old){ closeDialog(); return; }
+      const b=m.repo.local.find(x=>x.name===old);
+      if(b) b.name=nv;
+      run(`git branch -m ${old} ${nv}`,m.repo.n);
+      selId=`${m.repo.n}|local|b|${nv}`;
+      closeDialog(); render();
+    },
+  });
+}
+
+/* プッシュ (必要最低限) */
+function openPush(m){
+  const r=m.repo, b=m.branch, n=b.name, ahead=b.ahead||0;
+  openDialog({
+    title:`コミットを ${r.n} にプッシュ`,
+    body:`<div class="prow"><b title="${esc(n)}">${esc(n)}</b><span class="to">→</span>
+        <span class="rmt">origin</span><span class="to">:</span>
+        <b title="${esc(n)}">${esc(n)}</b></div>
+      <div class="pinfo">${ahead?`${ahead} 件のコミットをプッシュします`
+        :b.gone?"追跡ブランチが無いので新規に作成します":"プッシュするコミットはありません"}</div>
+      ${ahead?`<div class="clist">${(b.log||[]).slice(0,ahead).map(c=>
+        `<div class="c"><span class="dot"></span><span class="h">${esc(c.h)}</span>
+          <span class="s" title="${esc(c.s)}">${esc(c.s)}</span></div>`).join("")
+        ||'<div class="none">—</div>'}</div>`:""}
+      <div class="cbrow"><input type="checkbox" id="mforce">
+        <label for="mforce">強制プッシュ</label>
+        <span class="note">--force-with-lease</span></div>`,
+    ok:"プッシュ", wide:true,
+    onOk:()=>{
+      const f=document.getElementById("mforce")?.checked;
+      run(f?`git push --force-with-lease origin ${n}`
+           :b.gone?`git push -u origin ${n}`:`git push origin ${n}`,r.n);
+      const orig=r.local.find(x=>x.name===n);   // 描画用のコピーではなく元データを更新する
+      if(orig){ orig.ahead=0; orig.gone=0; }
+      closeDialog(); render();
+    },
+  });
+  // 強制プッシュを選んだらボタンも警告色にする
+  document.getElementById("mforce").addEventListener("change",e=>{
+    const btn=document.getElementById("mok");
+    btn.textContent=e.target.checked?"強制プッシュ":"プッシュ";
+    btn.classList.toggle("warn",e.target.checked);
+  });
+}
+
+/* ---------- メニュー ---------- */
+let menus=[];
+const closeMenus=(from=0)=>{ menus.splice(from).forEach(m=>m.el.remove()); };
+function showMenu(items,x,y,level){
+  closeMenus(level);
+  const el=document.createElement("div"); el.className="menu";
+  el.innerHTML=items.map((it,i)=>it.hr?`<div class="hr"></div>`:it.ttl?`<div class="ttl">${esc(it.ttl)}</div>`
+    :`<div class="mi${it.off?" off":""}" data-i="${i}"><span>${esc(it.l)}</span>
+      ${it.k?`<span class="k${it.v?"":" far"}">${it.k}</span>`:""}
+      ${it.v?`<span class="v">${esc(it.v)}</span>`:""}
+      ${it.sub?`<span class="ar2">›</span>`:""}</div>`).join("");
+  document.body.append(el);
+  el.style.left=Math.min(x,innerWidth-el.offsetWidth-4)+"px";
+  el.style.top=Math.min(y,innerHeight-el.offsetHeight-4)+"px";
+  el.addEventListener("mouseover",e=>{
+    const mi=e.target.closest(".mi[data-i]"); if(!mi) return;
+    const it=items[+mi.dataset.i], b=mi.getBoundingClientRect();
+    if(it.sub) showMenu(it.sub,b.right-3,b.top-5,level+1); else closeMenus(level+1);
+  });
+  el.addEventListener("click",e=>{
+    const mi=e.target.closest(".mi[data-i]"); if(!mi) return;
+    const it=items[+mi.dataset.i];
+    if(it.a){ act(it.a); closeMenus(0); }
+  });
+  menus[level]={el};
+}
+function menuFor(m){
+  const r=m.repo, cur=curOf(r), b=m.branch, Q=s=>`'${s}'`;
+  if(m.kind==="local"&&b.cur) return [
+    {l:"プル",a:"pull"},
+    {l:"プッシュ",a:"push-branch"},
+    {hr:1},
+    {l:`origin/${b.name} でリベース`,off:1},
+    {hr:1},
+    {l:"ブランチ名をコピー",a:"copy-branch"},
+    {l:"名前の変更",a:"rename-branch"},
+    {hr:1},
+    {l:"新規ブランチ",off:1},{l:"作業ツリーとの差分を表示",off:1},
+  ];
+  if(m.kind==="local") return [
+    {l:"チェックアウト",a:"checkout"},
+    {l:"チェックアウトとプル",a:"checkout-update"},
+    {l:`${Q(b.name)} から新規ブランチ`,off:1},
+    {hr:1},
+    {l:`${Q(b.name)} で ${Q(cur?cur.name:"")} をリベース`,off:1},
+    {l:`${Q(b.name)} を ${Q(cur?cur.name:"")} にマージ`,off:1},
+    {hr:1},
+    {l:"プル",a:"pull-selected"},
+    {l:"プッシュ",a:"push-branch"},
+    {hr:1},
+    {l:"ブランチ名をコピー",a:"copy-branch"},
+    {l:"名前の変更",a:"rename-branch"},
+    {hr:1},
+    {l:"削除",off:1},
+  ];
+  if(m.kind==="tag") return [
+    {l:"チェックアウト",a:"checkout-tag"},
+    {l:`${Q(b.name)} から新規ブランチ`,off:1},
+    {hr:1},
+    {l:"タグ名をコピー",a:"copy-branch"},
+    {hr:1},
+    {l:"削除",off:1},
+  ];
+  if(m.kind==="remote") return [
+    {l:"チェックアウト",a:"checkout"},
+    {l:`${Q(b.name)} から新規ブランチ`,off:1},
+    {hr:1},
+    {l:`${Q(b.name)} で ${Q(cur?cur.name:"")} をリベース`,off:1},
+    {l:`${Q(b.name)} を ${Q(cur?cur.name:"")} にマージ`,off:1},
+    {hr:1},
+    {l:"ブランチ名をコピー",a:"copy-branch"},
+    {hr:1},
+    {l:"削除",off:1},
+  ];
+  return [
+    {l:"このリポジトリをフェッチ",a:"fetch-repo"},
+    {l:"プル",a:"pull-repo"},
+    {hr:1},
+    {l:"すべてフェッチ",a:"fetch-all"},
+    {hr:1},
+    {l:"パス/参照のコピー",sub:[
+      {ttl:"コピー"},
+      {l:"絶対パス",a:"copy-path",v:r.path},
+      {l:"リポジトリ名",a:"copy-name",v:r.n},
+      {hr:1},
+      {l:"GitHub リポジトリ URL",a:"copy-url",v:r.url},
+    ]},
+    {hr:1},
+    {l:"Finder で表示",a:"reveal"},
+    {l:"ターミナルで開く",a:"terminal"},
+    {hr:1},
+    {l:"リポジトリを追加",a:"add-repo"},
+    {l:"リストから削除",a:"remove-repo"},
+  ];
+}
+
+/* ---------- イベント ---------- */
+const tree=document.getElementById("tree"), rowsEl=document.getElementById("rows"),
+      detail=document.getElementById("detail"), toast=document.getElementById("toast"),
+      qEl=document.getElementById("q"), strip=document.getElementById("strip");
+const metaAt=el=>flat[+el.dataset.i];
+tree.addEventListener("mousedown",e=>{
+  const row=e.target.closest(".r[data-i]"); if(!row) return;
+  setSel(metaAt(row).id);
+  if(e.button===0&&e.target.closest("svg.chev")) toggle();
+});
+tree.addEventListener("dblclick",e=>{
+  const row=e.target.closest(".r[data-i]"); if(!row) return;
+  const m=metaAt(row);
+  if(m.key) toggle(); else if(m.branch) act("checkout");
+});
+tree.addEventListener("contextmenu",e=>{
+  const row=e.target.closest(".r[data-i]"); if(!row) return;
+  e.preventDefault(); const m=metaAt(row); setSel(m.id);
+  // ディレクトリと ローカル / リモート / タグ の括りはメニューを出さない
+  if(m.kind==="folder"||m.kind==="section") return;
+  showMenu(menuFor(m),e.clientX,e.clientY,0);
+});
+addEventListener("mousedown",e=>{
+  if(menus.length&&!e.target.closest(".menu")) closeMenus(0); },true);
+
+/* リポジトリのドラッグ並び替え */
+const clearDrop=()=>rowsEl.querySelectorAll(".dropbefore,.dropafter")
+  .forEach(el=>el.classList.remove("dropbefore","dropafter"));
+tree.addEventListener("dragstart",e=>{
+  const row=e.target.closest(".r.repo[data-repo]");
+  if(!row){ e.preventDefault(); return; }
+  dragName=row.dataset.repo;
+  e.dataTransfer.effectAllowed="move";
+  e.dataTransfer.setData("text/plain",dragName);
+  row.classList.add("dragging");
+});
+tree.addEventListener("dragover",e=>{
+  const row=e.target.closest(".r.repo[data-repo]"); if(!row||!dragName) return;
+  e.preventDefault();
+  const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+  clearDrop();
+  if(row.dataset.repo!==dragName) row.classList.add(after?"dropafter":"dropbefore");
+});
+tree.addEventListener("drop",e=>{
+  const row=e.target.closest(".r.repo[data-repo]"); if(!row||!dragName) return;
+  e.preventDefault();
+  const target=row.dataset.repo;
+  if(target!==dragName){
+    const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+    const from=D.findIndex(r=>r.n===dragName), item=D.splice(from,1)[0];
+    let to=D.findIndex(r=>r.n===target); if(after) to++;
+    D.splice(to,0,item);
+  }
+  dragName=null; clearDrop(); render();
+});
+tree.addEventListener("dragend",()=>{ dragName=null; clearDrop(); render(); });
+
+function toggle(open){
+  const m=flat.find(x=>x.id===selId); if(!m||!m.key) return;
+  setFold(m.key,open===undefined?collapsed.has(m.key):open);
+  render();
+}
+// キーボード操作は持たない (v1 はマウスのみ)
+detail.addEventListener("click",e=>{
+  const b=e.target.closest("button[data-a]"); if(b) act(b.dataset.a); });
+qEl.oninput=e=>{ q=e.target.value.trim().toLowerCase(); render(); };
+strip.addEventListener("click",e=>{
+  const b=e.target.closest(".sb"); if(!b||b.classList.contains("off")) return;
+  act(b.dataset.a);
+});
+let tipEl=null;
+strip.addEventListener("mouseover",e=>{
+  const b=e.target.closest(".sb[data-tip]"); if(!b) return;
+  tipEl?.remove();
+  tipEl=document.createElement("div"); tipEl.className="tip";
+  tipEl.textContent=b.dataset.tip+(b.hasAttribute("data-v2")?" (v2)":"");
+  document.body.append(tipEl);
+  const r=b.getBoundingClientRect();
+  tipEl.style.left=(r.right+6)+"px";
+  tipEl.style.top=(r.top+(r.height-tipEl.offsetHeight)/2)+"px";
+});
+strip.addEventListener("mouseout",e=>{
+  if(!e.relatedTarget?.closest?.(".sb")){ tipEl?.remove(); tipEl=null; } });
+
+const sp=document.getElementById("splitter");
+sp.addEventListener("mousedown",e=>{
+  e.preventDefault(); sp.classList.add("drag");
+  const x0=e.clientX, w0=tree.offsetWidth;
+  const mv=ev=>{ tree.style.flexBasis=Math.max(240,Math.min(760,w0+ev.clientX-x0))+"px"; };
+  const up=()=>{ sp.classList.remove("drag"); document.body.style.cursor="";
+    removeEventListener("mousemove",mv); removeEventListener("mouseup",up); };
+  addEventListener("mousemove",mv); addEventListener("mouseup",up);
+  document.body.style.cursor="col-resize";
+});
+
+document.getElementById("ctabs").addEventListener("mousedown",e=>{
+  if(e.target.closest("#cclose")){ cOpen=false; renderConsole(); return; }
+  const x=e.target.closest("[data-close]");
+  if(x){ const n=x.dataset.close; logs.delete(n); failed.delete(n);
+    if(cTab===n) cTab=null;
+    renderConsole(); return; }
+  const t=e.target.closest("[data-tab]");
+  if(t){ cTab=t.dataset.tab; failed.delete(cTab); renderConsole(); }
+});
+toast.addEventListener("click",e=>{
+  const l=e.target.closest("[data-open]"); if(!l) return;
+  cTab=l.dataset.open; cOpen=true; renderConsole();
+});
+
+document.getElementById("mok").onclick=()=>dlgOk&&dlgOk();
+document.getElementById("mng").onclick=closeDialog;
+document.getElementById("mbody").addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&dlgOk) dlgOk();
+  if(e.key==="Escape") closeDialog();
+});
+document.getElementById("modal").addEventListener("mousedown",e=>{
+  if(e.target.id==="modal") closeDialog(); });
+
+render(); tree.focus();
+</script>
+</body>
+</html>

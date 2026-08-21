@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+*.log
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# ローカル専用
+.env
+.env.local
+
+# モックの実データ (業務リポジトリの情報が入るのでコミットしない)
+docs/mock/data.local.js
