@@ -31,5 +31,7 @@
 | [0014](0014-macos-only.md) | 対応プラットフォームは macOS のみ | 採用 |
 | [0015](0015-auxiliary-operations.md) | v1 に含める補助操作 (コピー / Finder / ターミナル / 復帰) | 採用 |
 | [0016](0016-store-without-plugin.md) | 設定は store プラグインを使わず自分で読み書きする | 採用 |
+| [0017](0017-typed-git-arguments.md) | git に渡す参照と sha は型で縛る | 採用 |
+| [0018](0018-command-result-steps.md) | 操作の結果は「段」の列で返す | 採用 |
 
 新しい ADR を足したらこの表にも追記する。

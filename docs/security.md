@@ -37,15 +37,18 @@ capability が効くのは plugin のコマンドと `core:` のコマンドだ�
 - オプションの終端は `--end-of-options` を使う。`git checkout --end-of-options -f` は参照 `-f` が無いとしてエラーになる
 - 参照の切り替えは `git switch` に寄せる。`git switch` はパスを一切受け付けないので、この事故が構造的に起きない
 - **すべての参照引数を共通の検証関数に通す。** 名前変更の新名だけではない。`checkout_branch(repo_id, "-f")` の 1 発で `git checkout -f` になり、ワークツリーの未コミット変更が全部消える
+- 通し忘れを型で防ぐ。**書き込みの実行関数は生の `&str` を受け付けない。** 渡せるのはコードに書いた固定文字列、検証を通った `RefName` / `ObjectName`、それらから組み立てた `Composed` だけ ([adr/0017-typed-git-arguments.md](adr/0017-typed-git-arguments.md))
+- `Composed::from_git_output` は型では守れない入口。**呼んで良いのは git の出力をパースした直後だけ** (`RepoPath::from_picked_folder` と同じ扱い)
 - 検証は `git check-ref-format --branch <名前>` か `refs/heads/<名前>` の完全修飾形で行う。`git check-ref-format <名前>` は完全修飾名を要求するので、`hotfix` のようなスラッシュ無しの正当な名前を弾いてしまう
 - `check-ref-format` を通っても、`-` 始まり・`@{` を含む・`..` を含む名前は明示的に拒否する。`--branch '@{-1}'` は妥当な名前として通ってしまう
+- 強制プッシュの sha もフロントから来る。16 進数 7〜64 桁だけを通す
 - 作業ディレクトリは `Command::current_dir` で明示する。`cd` を挟まない
 - 環境変数を固定する。`LC_ALL=C`、`GIT_TERMINAL_PROMPT=0` (認証待ちで固まらせない)、`GIT_OPTIONAL_LOCKS=0` (読み取りでロックを取らない)
 
 ## 出力の扱い
 
 - git の stdout / stderr はコンソールに出す。**認証情報が乗る可能性がある行はそのまま出さない**
-- リモート URL にトークンが埋まっている構成 (`https://x-access-token:...@github.com/...`) があり得る。表示前にマスクする
+- リモート URL にトークンが埋まっている構成 (`https://x-access-token:...@github.com/...`) があり得る。**フロントへ返す前に** Rust 側でマスクする (`git::mask_credentials`)
 - コンソールの内容をどこにも送信しない。ローカルに閉じる
 
 ## ログ

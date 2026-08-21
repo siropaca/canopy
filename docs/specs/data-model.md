@@ -24,6 +24,10 @@ git の状態をフロントで再計算しない。
 | `status` | `"loading" \| "ready" \| "error"` | |
 | `snapshot` | `RepoSnapshot?` | `ready` のときだけ |
 | `error` | `string?` | `error` のときだけ。ディレクトリが消えている、git リポジトリではない、など |
+| `running` | `bool` | このリポジトリに実行中の操作があるか。操作系 UI の有効条件になる |
+
+`running` は**本数で数えて**真偽値に落とす。  
+一括フェッチとユーザーの操作が重なったとき、真偽値だけで持つと先に終わった方が実行中の表示を消してしまう。
 
 ストアは `Map<RepoId, RepoState>` にする。  
 ツリーはリポジトリ見出しを最初から全件出して、中身だけ後から埋める。  
@@ -156,11 +160,65 @@ git の非ゼロ終了は**失敗ではなく結果**として返す。
 
 | フィールド | 型 | 意味 |
 | --- | --- | --- |
-| `ok` | `bool` | 終了コードが 0 か |
-| `command` | `string` | 実行したコマンド。コンソールに出す |
+| `kind` | `"ran" \| "skipped" \| "direct"` | どう終わったか。**見せ方はこれで決める** |
+| `ok` | `bool` | 求めたことができたか。`skipped` のときは何も起きていないので false |
+| `steps` | `CommandStep[]` | 実行した git を順に。`ran` 以外は空 |
+| `message` | `string?` | 人へ見せる 1 行。失敗の理由、または成功しても伝えるべきこと |
+
+**1 操作で git を 2 回叩くものがある。**  
+チェックアウトとプルは `git switch` → `git pull --rebase`、名前の変更は `git branch -m` → `git branch --unset-upstream`。  
+両方の出力をコンソールに残すので、段の列で持つ ([../adr/0018-command-result-steps.md](../adr/0018-command-result-steps.md))。
+
+`kind` の意味。
+
+| 値 | いつ | 見せ方 |
+| --- | --- | --- |
+| `ran` | git を実行した | `ok` で成功と失敗を分ける。段をコンソールに出す |
+| `skipped` | 同種操作が走っていたので実行しなかった | **失敗ではない。** 赤で出さない |
+| `direct` | git を実行しない操作 (コピー、Finder、ターミナル)、およびアプリ側の異常 | `ok` で分ける。コンソールに出す段は無い |
+
+**`steps` が空かどうかで見分けない。** 空になるのは `skipped` と `direct` の両方で、  
+`direct` にはコピーの成功もアプリ側の異常も乗る。段の数では区別できない。
+
+## CommandStep
+
+git を 1 回実行した記録。コンソールの 1 ブロックに対応する。
+
+| フィールド | 型 | 意味 |
+| --- | --- | --- |
+| `command` | `string` | 実行したコマンド。ユーザーが打つ形 |
+| `code` | `number?` | 終了コード。シグナルで死んだときと打ち切ったときは `null` |
 | `stdout` | `string` | |
 | `stderr` | `string` | |
-| `message` | `string?` | 失敗時に人へ見せる 1 行。よくある失敗は個別の文言にする |
+
+**認証情報は Rust 側でマスクしてから載せる。**  
+`https://x-access-token:TOKEN@github.com/...` という構成があり得る ([../security.md](../security.md))。
+
+## PushPreview
+
+プッシュダイアログに出すもの。`get_push_preview(repo_id, branch)` で取る。
+
+| フィールド | 型 | 意味 |
+| --- | --- | --- |
+| `branch` | `string` | |
+| `remote` | `string` | プッシュ先のリモート名。追跡先が無ければ `origin` |
+| `upstream` | `string?` | `origin/main` の形。未設定なら `null` |
+| `remote_sha` | `string?` | **ダイアログを開いた時点の**追跡先の sha。強制プッシュのリースに渡す |
+| `ahead` | `Commit[]` | 送るコミット |
+| `behind` | `Commit[]` | 強制プッシュで失われるコミット。ahead と behind の両方があるときに見せる |
+
+## RepoUpdate
+
+一括フェッチの 1 件分。`repo_snapshot_updated` イベントの中身。
+
+| フィールド | 型 | 意味 |
+| --- | --- | --- |
+| `repo_id` | `string` | |
+| `outcome` | `OpOutcome?` | 取れた結果。状態が読めなかったときは `null` |
+| `error` | `string?` | `outcome` が `null` のときの理由 |
+
+**読めなかったリポジトリも落とさずに知らせる。**  
+落とすと「フェッチしたのに何も起きない」リポジトリができて、実行中の表示も解けない。
 
 ## UiState (永続化)
 
@@ -192,6 +250,10 @@ git の非ゼロ終了は**失敗ではなく結果**として返す。
 選択にしか使わないので保存しない。`leaf|` を挟むのは、同じ名前のディレクトリの鍵と衝突させないため。
 
 **ブランチ名には `|` を入れられる。** 鍵を `split("|")` で分解せず、前方一致で判定する。
+
+`repo_order` などとは別に、設定ファイルには「ターミナルで開く」が起動するアプリ名も入る。  
+既定は `Terminal` ([../adr/0015-auxiliary-operations.md](../adr/0015-auxiliary-operations.md))。  
+v1 に設定画面は無いので、変えるときは設定ファイルを直接編集する。
 
 `expanded` に入っていない鍵は閉じている。  
 **既定で開くのは登録した瞬間だけ**で、リポジトリ見出し・`ローカル` の括り・ローカルのディレクトリを開く。  

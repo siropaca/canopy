@@ -20,7 +20,7 @@
 - `-c core.quotepath=false` を付ける。日本語のパスがエスケープされるのを防ぐ
 - パスを含む出力は `-z` (NUL 区切り) を優先する。ファイル名に空白や改行が入っても壊れない
 - 参照の切り替えは `git switch` を使う。`git checkout` はパスも受け取るので事故が起きる ([../security.md](../security.md))
-- すべての参照引数を共通の検証関数に通す
+- すべての参照引数を検証した型 (`RefName`) にしてから渡す ([../adr/0017-typed-git-arguments.md](../adr/0017-typed-git-arguments.md))
 
 ## 読み取り
 
@@ -35,7 +35,6 @@
 | タグ | `git for-each-ref refs/tags --format=<名前/日時>` |
 | 未コミット | `git status --porcelain` |
 | ワークツリー | `git worktree list --porcelain` |
-| 直近のコミット | `git log -5 --format=<hash/subject> <ブランチ>` |
 | origin の URL | `git remote get-url origin` |
 | リモートの一覧 | `git remote` |
 | detached のときの参照名 | `git describe --tags --exact-match HEAD` → 失敗したら `git rev-parse --short HEAD` |
@@ -75,17 +74,18 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | 操作 | IPC | コマンド | 前提 |
 | --- | --- | --- | --- |
 | フェッチ | `fetch_repo` | `git fetch --prune` | — |
+| フェッチ (全リポジトリ) | `fetch_all` | 各リポジトリで `git fetch --prune` | 結果は `repo_snapshot_updated` イベントで 1 件ずつ返す。戻り値は対象の id の配列 |
 | プル (現在のブランチ) | `pull_current` | `git pull --rebase` | 未コミットが無いこと。**`pull.rebase` の設定を見ずに常に rebase する** (このツールの方針) |
-| プル (他のローカルブランチ) | `fast_forward_branch` | `git fetch origin <名前>:<名前>` | チェックアウトせずに早送りする。早送りできないときは失敗する |
+| プル (他のローカルブランチ) | `fast_forward_branch` | `git fetch <リモート> <上流>:<名前>` | チェックアウトせずに早送りする。早送りできないときは失敗する |
 | チェックアウト | `checkout_branch` | `git switch --end-of-options <名前>` | ローカルブランチに切り替える |
 | チェックアウト (リモート・ローカルに無い) | `checkout_branch` | `git switch -c <ブランチ> --track <リモート>/<ブランチ>` | 追跡ブランチを作る。ローカルの有無は Rust 側で判定して分岐する |
 | チェックアウト (リモート・ローカルに有る) | `checkout_branch` | `git switch --end-of-options <ブランチ>` | **既存のローカルに切り替わるだけ。リモートの先端には乗らない。** そのことを UI に明示する |
 | チェックアウト (タグ) | `checkout_tag` | `git checkout --detach refs/tags/<タグ名>` | detached HEAD にする |
 | チェックアウトとプル | `checkout_and_pull` | `git switch <名前>` → `git pull --rebase` | 前が失敗したら止める |
-| プッシュ | `push_branch` | `git push origin <名前>` | — |
-| プッシュ (追跡なし) | `push_branch` | `git push -u origin <名前>` | 追跡ブランチが無いとき |
-| 強制プッシュ | `push_branch` | `git push --force-with-lease=<名前>:<sha> origin <名前>` | `--force` は使わない。**sha を明示する**。ahead が 0 のときは UI 側で禁止する |
-| ブランチ名の変更 | `rename_branch` | `git branch -m <旧> <新>` → `git branch --unset-upstream <新>` | `-m` は `branch.<新>.merge` を旧名のまま残す。追跡を外さないと、プッシュで origin 側に旧名と新名が両方できる |
+| プッシュ | `push_branch` | `git push <リモート> <名前>:<リモート側の名前>` | **push 先を明示する。** 省くと git は同名の ref を更新する |
+| プッシュ (追跡なし) | `push_branch` | `git push -u origin <名前>` | 追跡ブランチが無いとき。同名で作る |
+| 強制プッシュ | `push_branch` | `git push --force-with-lease=<リモート側の名前>:<sha> <リモート> <名前>:<リモート側の名前>` | `--force` は使わない。**sha を明示する**。ahead が 0 のときは UI 側で禁止する |
+| ブランチ名の変更 | `rename_branch` | `git branch -m <旧> <新>` → `git branch --unset-upstream <新>` | `-m` は `branch.<新>.merge` を旧名のまま残す。追跡を外さないと、プッシュで origin 側に旧名と新名が両方できる。**2 段目は追跡先が残っているときだけ** (無いブランチに撃つと失敗する) |
 | 直前のブランチに戻る | `checkout_previous` | `git checkout -` | detached HEAD から戻るときに使う |
 
 プッシュは 3 行あるが IPC は 1 つ。`force_with_lease` の引数で分岐する。  
@@ -103,7 +103,7 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | 並び順の変更 | `save_ui_state` | 専用のコマンドは持たない。`UiState.repo_order` に載せて保存する |
 | Finder で表示 | `reveal_in_finder` | `open -R <パス>` |
 | ターミナルで開く | `open_in_terminal` | `open -a <アプリ> <パス>`。アプリ名は設定に持つ |
-| プッシュ前のコミット一覧 | `get_push_preview` | `git log` で ahead 件数分を取る。スナップショットには載せない |
+| プッシュ前のコミット一覧 | `get_push_preview` | `git log <上流>..<名前>` と逆向きを取る。スナップショットには載せない |
 | UI 状態の保存 | `save_ui_state` | まとめて保存する (デバウンス)。**並び順もこれ 1 本で保存する** |
 
 コピー系はフロントで `navigator.clipboard.writeText` を使う。IPC を通さない。  
@@ -131,7 +131,7 @@ detached はどのブランチにも紐づけられないので載せない ([da
 
 ### 他のローカルブランチのプルは早送り限定
 
-`git fetch origin <名前>:<名前>` は**早送りできるときだけ成功する。**  
+`git fetch <リモート> <上流>:<名前>` は**早送りできるときだけ成功する。**  
 現在ブランチの `プル` (`git pull --rebase`) とは別物なので、UI の文言でも区別する。
 
 失敗するのは次の 3 つ。
@@ -139,7 +139,7 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | 状況 | 出力 | 扱い |
 | --- | --- | --- |
 | ahead がある / 分岐している | `! [rejected] ... (non-fast-forward)` | 早送りできないと伝える。**プッシュの拒否と同じ文字列なので、操作の種別で判定を分ける** |
-| どこかのワークツリーにチェックアウト済み | `refusing to fetch into branch` | そのワークツリーで `git -C <パス> pull --rebase` に切り替える |
+| どこかのワークツリーにチェックアウト済み | `refusing to fetch into branch` | **失敗させる前に** Rust 側が `worktree list` を見て、そのワークツリーで `git pull --rebase` に切り替える |
 | 追跡先が消えている (`gone`) | `couldn't find remote ref` | メニューのプルを無効にする |
 
 ### 重複の判定
@@ -164,21 +164,35 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | 状況 | git の出力 | 見せる文言 |
 | --- | --- | --- |
 | 未コミットがあってプル | `cannot pull with rebase` | プルに失敗しました (未コミットの変更あり) |
-| リモートが進んでいて**プッシュ** | `! [rejected] ... (non-fast-forward)` | プッシュが拒否されました (リモートが先に進んでいます) |
+| リモートが進んでいて**プッシュ** | `! [rejected] ... (non-fast-forward)` または `(fetch first)` | プッシュが拒否されました (リモートが先に進んでいます) |
 | 手元が進んでいて**プル** (早送り不可) | `! [rejected] ... (non-fast-forward)` | 早送りできません (手元にコミットがあります) |
 | リースが古くて強制プッシュ | `! [rejected] ... (stale info)` | リモートが更新されています。フェッチしてやり直してください |
-| ワークツリーにチェックアウト済みでプル | `refusing to fetch into branch` | そのワークツリーで実行します (自動で切り替える) |
+| ワークツリーにチェックアウト済みでプル | `refusing to fetch into branch` | そのブランチは別のワークツリーにあります (通常は Rust 側が先に切り替えるので出ない) |
 | 追跡先が消えていてプル | `couldn't find remote ref` | 追跡先が存在しません |
 | detached HEAD でプル | `You are not currently on a branch` | ブランチ上にいません |
 | ref のロック競合 | `unable to update local ref` | 同じリポジトリを二重に登録している可能性があります |
 | 未コミットがあってチェックアウト | `Your local changes ... would be overwritten` | チェックアウトできません (変更が上書きされます) |
 | コンフリクト | `CONFLICT` | 競合しました。手元で解決してください |
 | 認証に失敗 | `Authentication failed` / `Permission denied` | 認証に失敗しました |
-| ネットワーク | `Could not resolve host` | リモートに接続できませんでした |
+| ネットワーク | `Could not resolve host` / `Could not read from remote` | リモートに接続できませんでした |
+| 応答が無い | 打ち切って kill する | リモートの応答がありません (30 秒で打ち切りました) |
+
+**打ち切るのはフェッチとプッシュだけ** ([../adr/0009-concurrency-and-refresh.md](../adr/0009-concurrency-and-refresh.md))。  
+`git pull --rebase` は後半が rebase なので、途中で殺すと `.git/rebase-merge` が残り、v1 に `rebase --abort` の入口が無いのでアプリから復帰できない。  
+打ち切らない操作にも 600 秒の天井を置く。文言は「応答がありません (600 秒で打ち切りました)」。
+
+**認証と接続の判定はネットワーク操作に閉じる。**  
+`Permission denied` はローカルの権限エラー (`Unable to create '.git/index.lock'`) にも当たるので、どの操作でも認証扱いにすると原因の切り分けができない。
+
+打ち切ったときは stdout / stderr が空になる。  
+子プロセスの出力を途中まで拾う仕組みを持っていないため。コマンド行と文言はコンソールに残る。
 | 別のワークツリーにチェックアウト済み | `already used by worktree at` | 別のワークツリーで使用中です (パスを添える) |
 
 ツリーに `⧉` を出しているブランチのチェックアウトは、必ず `already used by worktree at` で失敗する。  
 チェックアウトの項目を無効にするか、上の文言で失敗を見せるかのどちらかにする。黙って失敗させない。
+
+git は同じ拒否を 2 通りの文言で出す (`(non-fast-forward)` と `(fetch first)`)。  
+どちらも同じ意味なので、両方を見る。理由は [../pitfalls.md](../pitfalls.md)。
 
 **同じ文字列でも操作によって意味が逆になる。**  
 `(non-fast-forward)` はプッシュなら「リモートが進んでいる」、プルなら「手元が進んでいる」。  

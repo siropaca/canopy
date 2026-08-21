@@ -39,8 +39,8 @@ canopy/
 │   │   ├── console/            コンソールパネルとタブ
 │   │   ├── sidebar/            左のアイコンツールバー
 │   │   ├── status-bar/         下端の集計表示
-│   │   ├── context-menu/       右クリックメニュー
-│   │   ├── dialog/             ダイアログの枠と個別ダイアログ
+│   │   ├── context-menu/       右クリックメニューと、行ごとの項目の決定
+│   │   ├── dialog/             ダイアログの枠と個別ダイアログ (名前の変更・プッシュ)
 │   │   └── toast/              トースト
 │   ├── shared/
 │   │   ├── ui/                 features をまたいで使う部品 (スクロールバー、仮想リスト、スプリッタ)
@@ -56,11 +56,14 @@ canopy/
 │   ├── src/
 │   │   ├── main.rs             エントリ。lib の run() を呼ぶだけ
 │   │   ├── lib.rs              Tauri の Builder。統合テストからも呼べるように lib にしている
-│   │   ├── commands/           #[tauri::command] の定義
-│   │   ├── git/                コマンド組み立て、実行、パース
+│   │   ├── commands/           #[tauri::command] の定義 (settings / snapshot / ops)
+│   │   ├── git/                コマンド組み立て、実行、パース、引数の型付けと検証
 │   │   ├── model/              serde の DTO
 │   │   ├── store/              設定の読み書き、id → パスの解決
-│   │   ├── queue/              同時実行の上限と世代の採番 (フェーズ 2 で直列キュー)
+│   │   ├── queue/              同時実行の上限、リポジトリごとのロック、世代の採番
+│   │   ├── op_kind.rs          操作の種別。git と queue の両方が見る
+│   │   ├── ops.rs              操作の合成 (locate → ロック → 実行 → 取り直し)
+│   │   ├── os.rs               Finder とターミナルを開く (`open`)
 │   │   └── state.rs            コマンドが共有する状態 (設定・キュー)
 │   ├── capabilities/           Tauri の権限 (docs/security.md)
 │   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
@@ -109,8 +112,8 @@ Rust から来ない型 (`RepoState`、`RowNode` など) は `src/ipc/types.ts` 
 
 ストアへ書き込む入り口は `store/` に集める。  
 起動時の読み込みは `store/bootstrap.ts`、ツリーの展開は `store/treeActions.ts`。  
-**フェーズ 2 のイベント購読も同じ形にする。** `ipc/events.ts` に `listen` の薄いラッパを置き、  
-購読を張るのは `store/` 側。features の `useEffect` で購読すると、`revision` の比較を通す場所が 2 箇所に分かれる。
+イベント購読も同じ形。`ipc/events.ts` に `listen` の薄いラッパを置き、購読を張るのは `store/events.ts`。  
+features の `useEffect` で購読すると、`revision` の比較を通す場所が 2 箇所に分かれる。
 
 ## データフロー
 
@@ -119,7 +122,7 @@ Rust から来ない型 (`RepoState`、`RowNode` など) は `src/ipc/types.ts` 
 3. 各リポジトリの状態を Rust 側で並列に読み取り、`RepoSnapshot` として返す。届いた分から埋める
 4. フロントはスナップショットを描画するだけ。git の状態をフロントで計算しない
 5. 操作 (checkout / pull / push / fetch / rename) は Tauri コマンドを 1 回呼ぶ
-6. コマンドは結果 (成否・stdout・stderr) を返し、**成否に関係なく**対象リポジトリのスナップショットを取り直して一緒に返す
+6. コマンドは結果 (実行した段ごとの成否・stdout・stderr) を返し、**成否に関係なく**対象リポジトリのスナップショットを取り直して一緒に返す
 7. フロントは結果からトーストとコンソール行を作り、スナップショットで表示を更新する。`revision` が古ければ捨てる
 
 読み取りと書き込みを混ぜない。  
@@ -128,13 +131,20 @@ git の実態と画面がずれる方が、少し待つより困る。
 
 取り直しの具体的な規定は [specs/git-operations.md](specs/git-operations.md) と [adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md)。
 
+**「locate → ロック → 実行 → 取り直し」の順序は `src-tauri/src/ops.rs` の 1 箇所に置く。**  
+コマンドごとに書くと、どれか 1 本だけ取り直しをロックの外でやる、という壊れ方をする。  
+`ops.rs` の関数は `&AppState` を受けるので、Tauri 無しでテストできる。
+
 ## 並行性
 
 - Tauri コマンドはすべて `async`。子プロセスは `tokio::process::Command`
-- 同一リポジトリの git 操作は直列。`index.lock` の衝突を避ける
-- スナップショットの取り直しも、その操作と同じ直列区間の中で行う
+- 同一リポジトリの git 操作は直列。`index.lock` の衝突を避ける。ロックは `RwLock` で、書き込み排他・読み取り共有
+  ([adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md) の「並行モデル」は `Mutex` と書いているが、同じ ADR の「排他の粒度」の
+  「書き込み排他・読み取り共有 (RwLock 相当)」を採った)
+- スナップショットの取り直しも、その操作と同じ直列区間の中で行う。世代の採番もロックの中
 - 異なるリポジトリは並列。全体の同時実行数は semaphore で絞る
 - 一括フェッチの同時実行上限は全体の上限より小さくして、対話操作の枠を空ける
+- **ネットワークの枠はロックを取る前に確保する。** ロックを持って枠を待つと、一括フェッチ中に同じリポジトリのチェックアウトが待たされる
 - 一括フェッチの結果は `repo_snapshot_updated` イベントで返ってきた順に流す
 
 詳細は [adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md)。
