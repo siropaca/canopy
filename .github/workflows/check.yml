@@ -1,0 +1,33 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同じブランチへ続けて push したら古い実行を止める
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS のみを対象にしている (docs/adr/0014-macos-only.md)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node・pnpm・Rust のバージョンは mise.toml から読む
+      - uses: jdx/mise-action@v4
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # ローカルとまったく同じコマンドを回す (docs/development.md)
+      - name: pnpm check
+        run: pnpm check

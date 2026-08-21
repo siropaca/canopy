@@ -5,12 +5,13 @@
 ランタイムは mise で揃える。
 
 ```sh
-mise install                  # Node LTS と Rust
+mise install                  # Node・pnpm・Rust
 pnpm install
 ```
 
-Rust は `mise.toml` で管理する。  
-rustup と混在させない。
+バージョンは `mise.toml` で固定する。  
+Rust は mise が内部で rustup を使って入れるので、`rustup default` で別のツールチェインに切り替えない。  
+pnpm は Node の bin にも入っていて PATH で勝つことがあるため、`mise.toml` と `package.json` の `packageManager` に同じバージョンを書く。
 
 ## コマンド
 
@@ -22,24 +23,39 @@ rustup と混在させない。
 | `pnpm gen:types` | Rust の struct から TypeScript の型を生成する |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint |
+| `pnpm format` | Prettier で整形する。**Markdown と `docs/` は対象外** |
 | `pnpm test` | Vitest |
 | `pnpm test:watch` | Vitest の watch。TDD 中はこれを回す |
 | `cargo test` | Rust のテスト (`src-tauri/` で実行) |
 | `cargo clippy -- -D warnings` | Rust の lint。警告はエラー扱い |
 | `cargo fmt --check` | Rust の整形チェック |
 
-`pnpm check` の順序は次のとおり。**型生成を typecheck より前に置く。**
+`pnpm check` の中身は次のとおり。  
+**型の検査を typecheck より前に置く。**
 
-```
-gen:types && git diff --exit-code src/ipc/generated \
-  && typecheck && lint && test \
-  && cargo fmt --check && cargo clippy -- -D warnings && cargo test \
-  && python3 scripts/check-docs.py
-```
+| 順 | スクリプト | 中身 |
+| --- | --- | --- |
+| 1 | `check:generated` | 生成した型が最新か (`scripts/check-generated.sh`) |
+| 2 | `typecheck` | `tsc --noEmit` |
+| 3 | `lint` | ESLint |
+| 4 | `check:format` | Prettier の `--check` |
+| 5 | `test` | Vitest |
+| 6 | `build` | `vite build`。**本番ビルドが通るか** |
+| 7 | `check:rust` | `cargo fmt --check` → `cargo clippy --locked -- -D warnings` → `cargo test --locked` |
+| 8 | `check:docs` | `python3 scripts/check-docs.py` |
 
-型生成が後ろにあると、tsc が古い生成物を見て通ってしまう。  
-検査は緑なのにフロントが壊れている状態が作れるので、必ずこの順にする。  
-`git diff --exit-code` で「生成物が最新か」も同時に確認する。  
+`build` を入れているのは、CSS の壊れや `index.html` の参照ミスを他の 7 段が誰も読まないため。  
+存在しないファイルの `@import` を足しても、typecheck も lint も Vitest も緑になる。
+
+`--locked` を付けているのは、`Cargo.lock` のコミット漏れを黙って解決させないため。
+
+型の検査が後ろにあると、tsc が古い生成物を見て通ってしまう。  
+検査は緑なのにフロントが壊れている状態が作れるので、必ずこの順にする。
+
+`check:generated` は一時ディレクトリに生成して `src/ipc/generated/` と比べる。  
+検査がファイルを書き換えないので、「手で直した生成物」と「struct を変えたのに生成し忘れ」の両方をそのまま検出できる。  
+落ちたら `pnpm gen:types` を実行して差分をコミットする。
+
 「通ったか」を 1 コマンドで判定できる状態を保つ。  
 新しい検査を足したら `pnpm check` にも足す。
 
@@ -81,6 +97,7 @@ CI 専用の手順を増やすと、ローカルで通ったのに CI で落ち�
 3. 追加したら ADR かフェーズのプランに「何のために入れたか」を残す
 4. ロックファイル (`pnpm-lock.yaml` / `Cargo.lock`) は必ずコミットする
 5. 定期的に `pnpm audit` と `cargo deny check` で棚卸しする
+6. `@types/*` は実行するランタイムとメジャーを揃える。`@types/node` が `mise.toml` の Node より新しいと、存在しない API が typecheck を通る
 
 すでに決まっている依存は [adr/](adr/) を参照。
 
@@ -92,7 +109,21 @@ CI 専用の手順を増やすと、ローカルで通ったのに CI で落ち�
 pnpm gen:types    # src/ipc/generated/ に出力される
 ```
 
+出力先は `.cargo/config.toml` の `TS_RS_EXPORT_DIR` で固定している。  
+`cargo test` を直接叩いても同じ場所に出る。
+
+この設定はリポジトリのルートに置く。  
+cargo は `--manifest-path` の位置ではなく**実行したディレクトリ**から設定を探すため、`src-tauri/.cargo/` に置くとルートから叩いたときに効かない。  
+リポジトリの外から `--manifest-path` で叩くと設定が見つからず、`src-tauri/bindings/` に出る。
+
+`[env]` に `force` を付けない。  
+`scripts/check-generated.sh` と `check:rust` が環境変数で出力先を差し替えているので、設定側を勝たせると検査が自分自身と比べることになる。
+
+`cargo test` は `export_bindings_*` という普通のテストとして生成を実行する。  
+そのため `check:rust` は `TS_RS_EXPORT_DIR` を `target/` の下に向けて回す。  
+検査がコミット対象のファイルを書き換えないようにするため。
+
 生成物はコミットする。  
-`pnpm check` が先頭で生成して差分を確認するので、忘れると検査で落ちる。
+`pnpm check` の `check:generated` が最新かを確認するので、忘れると検査で落ちる。
 
 方針と理由は [adr/0013-type-generation.md](adr/0013-type-generation.md)。

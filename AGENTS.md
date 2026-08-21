@@ -65,11 +65,14 @@ docs に書いていないことがあれば、それは調査して docs に書
 2. 仕組みで防げるなら仕組みにする。lint ルール、型、テスト、hook、skill の順で検討する
 3. 3 回以上繰り返す手順が出てきたら skill 化する。既存の skill は `.claude/skills/` に置く
 
-## この リポジトリ の仕組み
+## このリポジトリの仕組み
 
 | 場所 | 何をしているか |
 | --- | --- |
-| `scripts/check-docs.py` | リンク切れ、ADR 一覧のずれ、死んだ ADR への参照、過去に間違えた表現の再発を検出する |
+| `scripts/check-docs.py` | ドキュメントの整合性を検査する。検出する項目は [docs/workflow.md](docs/workflow.md) の「直したあとの波及確認」 |
+| `scripts/check-generated.sh` | コミットした TypeScript の型が、いまの Rust の struct と一致しているかを検出する |
+| `eslint.config.js` | 生の HTML を差し込む書き方と、層をまたぐ import を error にしている。[docs/architecture.md](docs/architecture.md) の依存の向きを機械で縛る |
+| `.github/workflows/check.yml` | main への push と PR で `pnpm check` を回す |
 | `.claude/settings.json` | `git add -A` などの危険なコマンドを拒否。読み取り系コマンドは許可して確認を減らしている |
 | `.claude/skills/phase-review/` | フェーズ完了時のレビュー手順 |
 | `.claude/skills/update-mock/` | モックを再生成する手順 |

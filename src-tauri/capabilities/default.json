@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "main ウィンドウに許可する権限。フロントは今のところ invoke も listen もしないので空。使う機能が出たフェーズで必要な分だけ足す (docs/security.md)",
+  "windows": ["main"],
+  "permissions": []
+}

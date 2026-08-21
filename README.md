@@ -5,8 +5,8 @@
 リポジトリを 10 個前後行き来する使い方で、**どのリポジトリに取り込む変更があるかを操作なしで把握する**ことを目的にしている。
 
 > [!NOTE]
-> 実装前です。設計ドキュメントと動く UI モックだけがある段階です。  
-> 進め方は [docs/plans/](docs/plans/) にあります。
+> 実装中です。いまは土台 (ビルド・検査・空のウィンドウ) までで、画面の中身はまだありません。  
+> 仕様とデザインは動く UI モックにあります。進め方は [docs/plans/](docs/plans/)。
 
 ## できること (v1)
 
@@ -33,7 +33,7 @@ open docs/mock/tree.html
 
 ## 動作環境
 
-- macOS
+- macOS 12 以降
 - git 2.24 以降 (`git switch` と `--end-of-options` を使う)
 
 外部への通信はしません。git を実行するだけです。  
@@ -42,7 +42,7 @@ open docs/mock/tree.html
 ## ビルドと実行
 
 ```sh
-mise install     # Node LTS と Rust
+mise install     # Node・pnpm・Rust
 pnpm install
 pnpm tauri dev   # 開発時
 pnpm tauri build # ビルド

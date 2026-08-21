@@ -1,0 +1,33 @@
+/*
+ * デザイントークン。
+ * 値の唯一の参照元は docs/mock/tree.tmpl.html の :root。
+ * ここを直したらモックも直す。値がずれると tokens.test.ts が落ちる。
+ * それぞれの用途は docs/design-system.md にある。
+ */
+:root {
+  /* 面 */
+  --bg: #1e1f22;
+  --panel: #2b2d30;
+  --head: #3b3e43;
+  --border: #393b40;
+  --border2: #4a4d51;
+
+  /* 文字と状態の背景 */
+  --fg: #dfe1e5;
+  --dim: #6f737a;
+  --hover: #2f3134;
+  --sel: #3c3f41;
+  --selfoc: #2e436e;
+
+  /* 意味の色 */
+  --track: #548af7;
+  --ahead: #62a85e;
+  --wt: #b28fd0;
+  --cur: #e8b73d;
+  --dirty: #e8a33d;
+  --gone: #9a5f5f;
+  --folder: #9aa0a6;
+
+  /* 寸法 */
+  --row: 21px;
+}

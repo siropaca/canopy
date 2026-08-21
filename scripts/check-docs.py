@@ -30,6 +30,10 @@ BANNED = [
     ("check-ref-format <", "`--branch` を付ける。完全修飾名を要求されるので単一セグメントが弾かれる"),
     ("git checkout <名前>", "参照の切り替えは `git switch`。checkout はパスも受け取る"),
     ("git checkout <ブランチ>", "参照の切り替えは `git switch`。checkout はパスも受け取る"),
+    ("git diff --exit-code", "生成物の検査は scripts/check-generated.sh の一時ディレクトリ比較に変えた"),
+    ("std::process::Command", "子プロセスは `tokio::process::Command`"),
+    ("列数の不一致を見ていない", "check_tables() が検出する"),
+    ("CSP で無効になる書き方を書けなく", "React の style prop は CSSOM 経由なので CSP では止まらない"),
 ]
 BANNED_EXCEPT = {
     "作業ツリー": ["docs/specs/ui.md"],          # IDEA のメニュー文言
@@ -44,6 +48,11 @@ BANNED_EXCEPT = {
     "check-ref-format <": ["scripts/check-docs.py", "docs/security.md", "docs/pitfalls.md"],
     "git checkout <名前>": ["scripts/check-docs.py", "docs/pitfalls.md"],
     "git checkout <ブランチ>": ["scripts/check-docs.py"],
+    "git diff --exit-code": ["scripts/check-docs.py"],
+    # 「使わない」と書いてある箇所は除く
+    "std::process::Command": ["scripts/check-docs.py", "docs/adr/0009-concurrency-and-refresh.md"],
+    "列数の不一致を見ていない": ["scripts/check-docs.py"],
+    "CSP で無効になる書き方を書けなく": ["scripts/check-docs.py"],
 }
 
 problems = []
@@ -142,22 +151,34 @@ def check_tables():
                 header = None
 
 
-def check_public_surface():
-    """表に出す文書に特定製品の名前が入っていないかを見る。
+# 表に出るファイル。ここに特定製品の名前を書かない (AGENTS.md の「書き方」)。
+# 設計の根拠として docs/ に書くのは構わない
+PUBLIC_FILES = ["README.md", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"]
+PUBLIC_DIRS = ["src", "src-tauri"]
+PRODUCT_WORDS = ["IntelliJ", "IDEA"]
 
-    設計の根拠として docs/ に書くのは構わないが、README とリポジトリの説明には出さない。
-    """
-    surface = ["README.md"]
-    words = ["IntelliJ", "IDEA"]
-    for name in surface:
+
+def public_surface_files():
+    for name in PUBLIC_FILES:
         path = os.path.join(ROOT, name)
-        if not os.path.exists(path):
-            continue
+        if os.path.exists(path):
+            yield path
+    for name in PUBLIC_DIRS:
+        for base, dirs, files in os.walk(os.path.join(ROOT, name)):
+            dirs[:] = [d for d in dirs if d not in ("target", "gen", "node_modules", "icons")]
+            for f in files:
+                if f.endswith((".ts", ".tsx", ".css", ".rs", ".html", ".json")):
+                    yield os.path.join(base, f)
+
+
+def check_public_surface():
+    """アプリの表に出るところに特定製品の名前が入っていないかを見る。"""
+    for path in public_surface_files():
         for i, line in enumerate(open(path, encoding="utf-8"), 1):
-            for w in words:
+            for w in PRODUCT_WORDS:
                 if w in line:
                     problems.append(
-                        f"表に製品名  {name}:{i} 「{w}」 — README には書かない"
+                        f"表に製品名  {rel(path)}:{i} 「{w}」 — 表に出るファイルには書かない"
                     )
 
 

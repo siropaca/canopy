@@ -34,6 +34,10 @@
 1 つのテストは Arrange / Act / Assert の 3 段で書く。  
 テスト名は「何がどうなるか」を日本語で書く。`it("behind があるブランチはプッシュが拒否される")` のように読める形にする。
 
+Rust は関数名が識別子なので英語にする。  
+日本語の説明は関数の直前のコメントに置く。  
+`/// behind があるブランチはプッシュが拒否される` + `fn rejects_push_when_behind()` の形。
+
 ## git を使うテスト
 
 実物の git を使う。  
@@ -58,7 +62,12 @@
 
 ## デザイントークンのずれを検出する
 
-`docs/mock/tree.tmpl.html` の `:root` と `src/shared/styles/tokens.css` の値が一致していることをテストで確認する。  
+`docs/mock/tree.tmpl.html` の `:root`、`src/shared/styles/tokens.css`、`docs/design-system.md` の表の 3 つが一致していることをテストで確認する。  
+実装は `src/shared/styles/tokens.test.ts`。  
 `tree.html` は生成物なので読まない。  
 モック側だけ直して実装が古いままになるのを防ぐ。  
-片方を直したらもう片方も直さないとテストが落ちる状態にしておく。
+1 つを直したら残りも直さないとテストが落ちる状態にしておく。
+
+トークンの名前の一覧もテストに書いてある。  
+増減したらそこも直す。  
+個数のしきい値だけだと、パーサが壊れて変数が消えたときに気づけない。

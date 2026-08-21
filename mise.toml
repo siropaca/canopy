@@ -1,0 +1,6 @@
+# ランタイムの固定。理由と注意は docs/development.md の「環境」
+[tools]
+node = "24.18.0"
+# package.json の packageManager と同じ値にする
+pnpm = "11.9.0"
+rust = { version = "1.98.0", profile = "default" }

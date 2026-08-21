@@ -12,17 +12,19 @@
 
 - Rust の struct を単一の情報源にして、TypeScript の型を生成する。`ts-rs` を使う
 - 生成物は `src/ipc/generated/` に置いてコミットする
-- `pnpm check` の先頭で生成し、`git diff --exit-code` で古いままになっていないことを確認する
+- `pnpm check` の先頭で、コミットしてある生成物が最新かを確認する。一時ディレクトリに生成し直して比べる (`scripts/check-generated.sh`)
 - **コマンドの引数と戻り値のラッパは手書きにする。** `ts-rs` は struct しか生成しないので、`invoke` の引数名はどうしても手書きになる。そこは統合テストで縛る
 - `Option<T>` は `T | null` として出る。`T | undefined` ではない
 - 時刻は `i64` の Unix ミリ秒 (UTC)。相対時刻の文字列はフロントで組み立てる
-- フィールド名は Rust の snake_case のまま出す。`serde(rename_all)` は使わない。lint の命名規則から DTO を除外する
+- フィールド名は Rust の snake_case のまま出す。`serde` も `ts` も `rename_all` を使わない。lint の命名規則から DTO を除外する
 
 ## 理由
 
 - v1 のコマンドは 8 個程度なので、DTO だけ生成してラッパは手書きで足りる
-- 生成を `pnpm check` の**先頭**に置かないと、tsc が古い生成物を見て通る。検査は緑なのにフロントが壊れている状態が作れる
-- `rename_all` を後から足すと `ts-rs` 側に反映されず、TS は `originUrl` があると言うのに実行時は `undefined` になる。最初から snake_case で揃える
+- 型の検査を `pnpm check` の**先頭**に置かないと、tsc が古い生成物を見て通る。検査は緑なのにフロントが壊れている状態が作れる
+- 検査は生成し直したものと比べる。`git diff` だと未追跡の新しい型を見逃すうえ、検査を通すためにコミットが要る
+- `rename_all` は片方だけに付けると型と実行時がずれる。**ずれる向きは `#[ts(...)]` 側。** `ts-rs` は既定で `serde-compat` が有効なので `#[serde(rename_all)]` には追随するが、`#[ts(rename_all)]` を単独で付けると serde だけ snake_case のまま残り、TS は `originUrl` と言うのに実行時は `origin_url` になる (実測)
+- ずれは `src-tauri/src/model/mod.rs` の `assert_serde_keys_match_ts` で検出する。DTO を足したらこの関数に通す。最初から snake_case で揃える
 - git の `%(committerdate:relative)` は英語の相対時刻文字列なので、そのまま画面に出せない。数値で渡してフロントで整形する
 
 ## 検討した他の案
@@ -31,10 +33,10 @@
 | --- | --- |
 | 手で両方書く | 必ずずれる |
 | `tauri-specta` | コマンドの引数まで型で守れるが、依存が増える。コマンドが 8 個ならラッパ手書き + 統合テストで足りる |
-| `serde(rename_all = "camelCase")` で TS 側を camelCase に | `ts-rs` の serde 互換は feature 依存で、静かにずれる |
+| `serde(rename_all = "camelCase")` で TS 側を camelCase に | 変換が要る名前と要らない名前が混ざり、どちらの規約で書かれているか読めなくなる |
 
 ## 影響
 
-- `pnpm check` の順序が固定される。検査を足すときも生成を先頭に保つ
+- `pnpm check` の順序が固定される。検査を足すときも型の検査を先頭に保つ
 - DTO のフィールドが snake_case になるので、フロントの命名規約に例外が入る
-- コマンドのラッパは手書きなので、引数名の間違いは型では防げない。統合テストで担保する
+- コマンドのラッパは手書きなので、引数名の間違いは型では防げない。統合テストで担保する。そのために `run()` からハンドラ集合を切り出す必要がある (フェーズ 1)

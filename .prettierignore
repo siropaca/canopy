@@ -1,0 +1,13 @@
+# Markdown は対象外。行末 2 スペースのハードブレークが壊れる (AGENTS.md の書き方)
+*.md
+
+# 生成物
+dist/
+src/ipc/generated/
+pnpm-lock.yaml
+src-tauri/gen/
+src-tauri/target/
+src-tauri/icons/
+
+# モックは意図して詰めて書いてある。整形させない (AGENTS.md の「UI はモックに従う」)
+docs/

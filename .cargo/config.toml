@@ -1,0 +1,4 @@
+# ts-rs の出力先。ここに置く理由は docs/development.md の「型の共有」
+# force を付けない。scripts/check-generated.sh が環境変数で上書きして比較するため
+[env]
+TS_RS_EXPORT_DIR = "../src/ipc/generated"

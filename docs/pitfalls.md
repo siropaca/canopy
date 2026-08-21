@@ -72,6 +72,13 @@ idle のサブエージェントはトークンを消費せず、セッション
 見た目の整理のために投げ直すと、8 体それぞれが起きて 1 ターン処理する分のコストがかかる。  
 **放置してよい。**
 
+### スクリーンショットには画面収録の許可が必要
+
+`screencapture` は端末に画面収録の許可が無いと `could not create image from window` で失敗する。  
+ウィンドウ ID を指定しても領域を指定しても同じ。  
+許可が無い環境では、`CGWindowListCopyWindowInfo` でウィンドウの位置とサイズを読んで存在と寸法を確かめ、  
+画面の中身はブラウザ (`http://localhost:1420`) 側で確認する。
+
 ### 完了通知が来ても報告が届いていないことがある
 
 サブエージェントが完走しても、最終報告がこちらに渡ってこない場合がある。  
@@ -88,8 +95,8 @@ idle のサブエージェントはトークンを消費せず、セッション
 Markdown の表にヘッダーだけ列を足して行を埋め忘れると、表そのものが崩れる。  
 レビュー反映で `IPC` の列を足したときに実際にやった。
 
-`scripts/check-docs.py` は列数の不一致を見ていないので、表を触ったら目で確認する。  
-セル内のパイプは `\|` でエスケープする。
+`scripts/check-docs.py` の `check_tables()` が列数の不一致を検出する。  
+セル内のパイプは `\|` でエスケープする (検査もこの形を除外している)。
 
 ### 仕様の定義が死んだ ADR にだけ残ることがある
 
@@ -198,3 +205,65 @@ git は何も出力しないのでコンソールにも残らない。
 
 `git checkout v1.0` は `warning: refname 'v1.0' is ambiguous` を出してブランチに切り替わる。  
 タグを detached でチェックアウトするなら `git checkout --detach refs/tags/<名前>` を使う。
+
+## ツールチェインと設定
+
+### `tauri icon` は macOS 以外の画像も作る
+
+`pnpm tauri icon` は iOS・Android・Windows の画像まで生成する。  
+macOS だけを対象にしているので ([adr/0014-macos-only.md](adr/0014-macos-only.md))、  
+`android/` `ios/` `icon.ico` `Square*.png` `StoreLogo.png` は消す。  
+残すのは `32x32.png` `128x128.png` `128x128@2x.png` `icon.icns` と元画像。  
+`icon.png` (Linux 向けの 512x512) も `tauri.conf.json` から参照しないので消す。
+
+### WebView の中に何が出ているかは `on_page_load` で確かめる
+
+画面収録の許可が無いとスクリーンショットが撮れず、ウィンドウが白いのか描画済みなのかが分からない。  
+`Builder::on_page_load` で `payload.url()` と `payload.event()` を stderr に出せば、読み込みが `Started` で止まったのか `Finished` まで行ったのかが分かる。
+
+ログを見るには**バンドルの中の実体**を直接起動する。
+
+```sh
+src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
+```
+
+`open -a` は切り離されるので stderr が取れない。  
+`target/release/canopy` (バンドル外) を叩くと、macOS がアプリとして扱わずウィンドウが出ない。
+
+### `.dmg` のバンドルは Finder の automation 許可が要る
+
+`tauri build` の `dmg` ターゲットは `bundle_dmg.sh` が AppleScript で Finder のウィンドウを整える。  
+許可が無い環境では `.app` の生成まで成功してから `failed to run bundle_dmg.sh` で落ちる。  
+`bundle.targets` を `["app"]` にしておけば起きない。
+
+### TypeScript 7 は typescript-eslint がまだ対応していない
+
+`typescript` の `latest` は 7 系だが、typescript-eslint の peer は `<6.1.0`。  
+7 を入れると型を見る lint ルール (`recommendedTypeChecked`) が全部使えなくなる。  
+`typescript` は 6.0.x に**キャレット無しで**固定する。  
+`^6.0.3` だと 6.1 に上がって範囲から出る。
+
+### `baseUrl` は TypeScript 6 で deprecated
+
+`paths` は `baseUrl` 無しで書く。  
+値は tsconfig からの相対 (`"@/*": ["./src/*"]`)。  
+`baseUrl` を残すと `TS5101` でコンパイルが止まる。
+
+### `noPropertyAccessFromIndexSignature` は CSS Modules と噛み合わない
+
+`vite/client` の型定義は `*.module.css` を `{ readonly [key: string]: string }` として宣言している。  
+このオプションを入れると `styles.app` が `TS4111` で落ち、`styles["app"]` と書くしかなくなる。  
+アンビエント宣言なので上書きもできない。  
+クラス名を型で縛りたくなったら、CSS Modules の `.d.ts` を生成する道具を検討する。
+
+### `eslint-plugin-react-hooks` の flat config は入れ子になっている
+
+`configs.recommended` と `configs["recommended-latest"]` はどちらも eslintrc 形式で、flat config に渡すと  
+`"plugins" を配列で書いている` というエラーになる。  
+flat 用は `configs.flat["recommended-latest"]`。
+
+### Prettier に `docs/` を整形させるとモックが壊れる
+
+`docs/mock/tree.tmpl.html` は意図して詰めて書いてある。  
+整形すると差分が全面に出て、モックを参照元にしている意味が薄れる。  
+`.prettierignore` で `*.md` と `docs/` を外す。

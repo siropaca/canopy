@@ -18,7 +18,7 @@ Tauri 2 の 2 プロセス構成。
 │  store/     設定の永続化                      │
 │  model/     フロントと共有する DTO            │
 └─────────────────────────────────────────────┘
-               │ std::process::Command
+               │ tokio::process::Command
             ┌──┴──┐
             │ git │
             └─────┘
@@ -38,37 +38,67 @@ canopy/
 │   │   ├── detail/             右パネル
 │   │   ├── console/            コンソールパネルとタブ
 │   │   ├── sidebar/            左のアイコンツールバー
+│   │   ├── status-bar/         下端の集計表示
 │   │   ├── context-menu/       右クリックメニュー
 │   │   ├── dialog/             ダイアログの枠と個別ダイアログ
 │   │   └── toast/              トースト
 │   ├── shared/
-│   │   ├── ui/                 features をまたいで使う部品
+│   │   ├── ui/                 features をまたいで使う部品 (スクロールバー、仮想リスト、スプリッタ)
 │   │   ├── hooks/
-│   │   ├── lib/                純粋関数 (ツリー構築、フィルタなど)
+│   │   ├── lib/                純粋関数 (ツリー構築、フィルタ、集計)
 │   │   └── styles/             トークン (CSS 変数) とリセット
-│   ├── ipc/                    invoke のラッパ、DTO の型、イベント購読
+│   ├── ipc/
+│   │   ├── generated/          ts-rs が出力する DTO の型。手で触らない
+│   │   └── (直下)              invoke のラッパ、イベント購読、フロント専用の手書き型
 │   └── store/                  Zustand のストア
 ├── src-tauri/
 │   ├── src/
-│   │   ├── main.rs
+│   │   ├── main.rs             エントリ。lib の run() を呼ぶだけ
+│   │   ├── lib.rs              Tauri の Builder。統合テストからも呼べるように lib にしている
 │   │   ├── commands/           #[tauri::command] の定義
 │   │   ├── git/                コマンド組み立て、実行、パース
 │   │   ├── model/              serde の DTO
 │   │   ├── store/              設定の読み書き
 │   │   └── queue/              リポジトリごとの直列実行キュー
+│   ├── capabilities/           Tauri の権限 (docs/security.md)
+│   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
+│   ├── tauri.conf.json         ウィンドウ、CSP、バンドルの設定
 │   └── tests/                  統合テスト (実際の一時リポジトリを使う)
+├── scripts/                    検査とアセット生成のスクリプト
+├── .cargo/config.toml          型の出力先 (docs/development.md)
+├── .github/workflows/          CI
 └── docs/
 ```
 
 この構成は Feature-Sliced Design の考え方に沿っている。  
-層 (`app` / `features` / `shared`) をまたぐ依存は一方向だけ許す。  
-`shared` は `features` を知らない。`features` 同士は直接参照しない。
+層をまたぐ依存は一方向だけ許す。  
+上から下へだけ import してよい。
+
+```
+app > features > store > ipc > shared
+```
+
+`shared` は `app` / `features` / `store` を知らない。  
+`features` 同士は直接参照しない。  
+参照したくなったら `shared` に上げる。  
+例外は `ipc/generated/` だけ。  
+型しか入っていないのでどの層からでも読める。
+
+**この順序は `eslint.config.js` の `no-restricted-imports` で機械的に縛っている。**  
+人の目で守る前提にしない。
 
 `features/` の中は「その画面でしか使わないもの」だけ置く。  
 2 つ目の features から参照したくなった時点で `shared/` に上げる。
 
-純粋なロジック (ツリー構築、絞り込み、並び替え) は `shared/lib/` に置いて、React に依存させない。  
+純粋なロジック (ツリー構築、絞り込み、並び替え、ステータスバーの集計) は `shared/lib/` に置いて、React に依存させない。  
 テストが書きやすくなるので、判断に迷ったらロジックを外へ出す。
+
+2 つ目の利用者が確定しているものは、最初から `shared/ui/` に置く。  
+自前スクロールバーと仮想リストはツリーとコンソールの両方で使う ([adr/0012-scrollbar-and-virtualization.md](adr/0012-scrollbar-and-virtualization.md))。  
+ペインのスプリッタも同じ扱い。
+
+Rust から来ない型 (`RepoState`、`RowNode` など) は `src/ipc/types.ts` に手で書く。  
+`ipc/generated/` は生成物専用で、lint と整形と生成物の検査から外してあるため、手書きを混ぜられない。
 
 ## データフロー
 
