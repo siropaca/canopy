@@ -3,11 +3,22 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { COMMANDS } from "./commands";
+import { COMMANDS, EVENTS } from "./commands";
 
 const LIB_RS = fileURLToPath(new URL("../../src-tauri/src/lib.rs", import.meta.url));
-const REPO_RS = fileURLToPath(new URL("../../src-tauri/src/commands/repo.rs", import.meta.url));
-const REPOS_TS = fileURLToPath(new URL("./repos.ts", import.meta.url));
+/** コマンドを定義しているファイル。増やしたらここに足す (src-tauri/src/commands/mod.rs) */
+const COMMAND_RS = ["settings", "snapshot", "ops"].map((name) =>
+  fileURLToPath(new URL(`../../src-tauri/src/commands/${name}.rs`, import.meta.url)),
+);
+const OPS_RS = fileURLToPath(new URL("../../src-tauri/src/commands/ops.rs", import.meta.url));
+/** invoke を呼んでいるラッパ */
+const WRAPPERS_TS = ["repos", "ops"].map((name) =>
+  fileURLToPath(new URL(`./${name}.ts`, import.meta.url)),
+);
+
+function read(paths: readonly string[]): string {
+  return paths.map((path) => readFileSync(path, "utf8")).join("\n");
+}
 
 /** `invoke_handler()` に並んでいるコマンド名を読む */
 export function readRegisteredCommands(source: string): string[] {
@@ -15,7 +26,7 @@ export function readRegisteredCommands(source: string): string[] {
   if (!block?.[1]) {
     throw new Error("lib.rs に generate_handler! が無い");
   }
-  return [...block[1].matchAll(/commands::repo::(\w+)/g)].map(([, name]) => name ?? "");
+  return [...block[1].matchAll(/commands::\w+::(\w+)/g)].map(([, name]) => name ?? "");
 }
 
 /**
@@ -72,10 +83,15 @@ export function readInvokedArguments(source: string): Record<string, string[]> {
   return calls;
 }
 
+/** Rust 側が emit しているイベント名を読む */
+export function readEventNames(source: string): string[] {
+  return [...source.matchAll(/pub const \w+: &str = "(\w+)";/g)].map(([, name]) => name ?? "");
+}
+
 describe("コマンドの引数名", () => {
   it("invoke に渡すキーが Rust の引数名と一致する", () => {
-    const declared = readCommandArguments(readFileSync(REPO_RS, "utf8"));
-    const invoked = readInvokedArguments(readFileSync(REPOS_TS, "utf8"));
+    const declared = readCommandArguments(read(COMMAND_RS));
+    const invoked = readInvokedArguments(read(WRAPPERS_TS));
 
     for (const [key, command] of Object.entries(COMMANDS)) {
       expect(invoked[key], `${key} を invoke している行が無い`).toBeDefined();
@@ -146,19 +162,37 @@ describe("コマンドの名前", () => {
   });
 });
 
+describe("イベントの名前", () => {
+  it("購読する名前が Rust の emit する名前と一致する", () => {
+    const emitted = readEventNames(readFileSync(OPS_RS, "utf8"));
+
+    for (const name of Object.values(EVENTS)) {
+      expect(emitted, `${name} を emit している定数が無い`).toContain(name);
+    }
+  });
+});
+
+describe("readEventNames", () => {
+  it("定数の値を読む", () => {
+    const source = 'pub const REPO_SNAPSHOT_UPDATED: &str = "repo_snapshot_updated";';
+
+    expect(readEventNames(source)).toEqual(["repo_snapshot_updated"]);
+  });
+});
+
 describe("readRegisteredCommands", () => {
   it("generate_handler! の中だけを読む", () => {
     const source = `
-      fn other() { commands::repo::not_registered; }
+      fn other() { commands::settings::not_registered; }
       pub fn invoke_handler() {
         tauri::generate_handler![
-            commands::repo::list_repos,
-            commands::repo::add_repo,
+            commands::settings::list_repos,
+            commands::ops::fetch_repo,
         ]
       }
     `;
 
-    expect(readRegisteredCommands(source)).toEqual(["list_repos", "add_repo"]);
+    expect(readRegisteredCommands(source)).toEqual(["list_repos", "fetch_repo"]);
   });
 
   it("generate_handler! が無ければ投げる", () => {

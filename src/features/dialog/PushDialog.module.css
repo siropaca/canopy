@@ -1,0 +1,110 @@
+.route {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.route b {
+  flex: 0 1 auto;
+  max-width: 42%;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote {
+  color: var(--track);
+  white-space: nowrap;
+}
+
+.to {
+  flex: 0 0 auto;
+  color: var(--dim);
+}
+
+.info {
+  margin-top: 8px;
+  color: var(--dim);
+}
+
+.warning {
+  margin-top: 8px;
+  color: var(--dirty);
+}
+
+.commits {
+  max-height: 220px;
+  margin-top: 8px;
+  overflow: auto;
+}
+
+.commit {
+  position: relative;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  height: 23px;
+}
+
+.dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  background: var(--track);
+  border-radius: 50%;
+}
+
+/* git のログのように縦線でつなぐ。枠は付けない */
+.commit:not(:last-child)::before {
+  position: absolute;
+  top: 15px;
+  left: 5.5px;
+  width: 1px;
+  height: 15px;
+  content: "";
+  background: var(--graph);
+}
+
+.hash {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}
+
+.subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lostDot {
+  background: var(--del);
+}
+
+.checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.checkbox input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.disabled {
+  color: var(--disabled);
+}
+
+.note {
+  color: var(--dim);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}

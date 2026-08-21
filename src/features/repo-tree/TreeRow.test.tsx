@@ -35,6 +35,8 @@ function renderRow(row: RowNode, overrides: Partial<Parameters<typeof TreeRow>[0
     selected: false,
     onSelect: vi.fn(),
     onToggle: vi.fn(),
+    onActivate: vi.fn(),
+    onContextMenu: vi.fn(),
     ...overrides,
   };
   const rendered = render(<TreeRow {...props} />);
@@ -291,13 +293,94 @@ describe("行の操作", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("ブランチのダブルクリックでは開閉しない (チェックアウトはフェーズ 2)", () => {
+  it("ブランチのダブルクリックでは開閉せず、チェックアウトする", () => {
     const rows = rowsOf({ local: [makeBranch("main")] });
     const branch = findRow(rows, (candidate) => candidate.kind === "branch");
-    const { element, onToggle } = renderRow(branch);
+    const { element, onToggle, onActivate } = renderRow(branch);
 
     element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
 
     expect(onToggle).not.toHaveBeenCalled();
+    expect(onActivate).toHaveBeenCalledWith(branch);
+  });
+
+  it("タグのダブルクリックでもチェックアウトする (detached になる)", () => {
+    const rows = rowsOf({ local: [makeBranch("main")], tags: [makeRef("v1.0.0")] });
+    const tag = findRow(rows, (candidate) => candidate.kind === "tag");
+    const { element, onActivate } = renderRow(tag);
+
+    element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    expect(onActivate).toHaveBeenCalledWith(tag);
+  });
+
+  it("現在のブランチのダブルクリックでは何も起きない", () => {
+    const rows = rowsOf({ local: [makeBranch("main", { is_current: true })] });
+    const branch = findRow(rows, (candidate) => candidate.kind === "branch");
+    const { element, onActivate } = renderRow(branch);
+
+    element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  /** `⧉` 付きは必ず `already used by worktree at` で失敗する */
+  it("`⧉` が付いたブランチのダブルクリックでは何も起きない", () => {
+    const rows = rowsOf({
+      local: [makeBranch("held", { worktree_path: "/wt/held" })],
+      worktrees: [makeWorktree("held", "/wt/held")],
+    });
+    const branch = findRow(rows, (candidate) => candidate.kind === "branch");
+    const { element, onActivate } = renderRow(branch);
+
+    element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+});
+
+describe("右クリック", () => {
+  it("選択してメニューを出す", () => {
+    const rows = rowsOf({ local: [makeBranch("main")] });
+    const branch = findRow(rows, (candidate) => candidate.kind === "branch");
+    const { element, onSelect, onContextMenu } = renderRow(branch);
+
+    element.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+
+    expect(onSelect).toHaveBeenCalledWith(branch.key);
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it("括りとディレクトリでは選択だけ (docs/specs/ui.md)", () => {
+    const rows = rowsOf({ local: [makeBranch("feature/a")] });
+    for (const kind of ["section", "directory"] as const) {
+      const row = findRow(rows, (candidate) => candidate.kind === kind);
+      const { element, onSelect, onContextMenu } = renderRow(row);
+
+      element.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+
+      expect(onSelect).toHaveBeenCalledWith(row.key);
+      expect(onContextMenu, kind).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("実行中の行", () => {
+  /** 行は薄くする。スピナーは出さない (docs/specs/ui.md の「実行中の扱い」) */
+  it("薄く表示して、ダブルクリックのチェックアウトも止める", () => {
+    const repo = makeRepo("r1", { local: [makeBranch("main")] }, { running: true });
+    const rows = flatten([repo], {
+      expanded: new Set(allKeysOf([repo], ["local"])),
+      query: "",
+      groupDirectories: true,
+      localOnly: false,
+    });
+    const branch = findRow(rows, (candidate) => candidate.kind === "branch");
+    const { element, onActivate } = renderRow(branch);
+
+    element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    expect(element.className).toContain(styles.dimmed);
+    expect(onActivate).not.toHaveBeenCalled();
   });
 });

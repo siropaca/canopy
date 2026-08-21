@@ -73,6 +73,7 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
       key,
       depth: 0,
       repoId: repo.id,
+      running: repo.running,
       repo,
       expanded: isOpen(key),
       // ヒットが無いリポジトリも見出しだけ残す。薄く表示する (docs/specs/ui.md)
@@ -93,6 +94,7 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
         key,
         depth: 1,
         repoId: repo.id,
+        running: repo.running,
         scope: section.scope,
         label: section.label,
         expanded: isOpen(key),
@@ -103,6 +105,7 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
         prefix: "",
         scope: section.scope,
         snapshot,
+        running: repo.running,
         isOpen,
       });
     }
@@ -115,12 +118,13 @@ interface EmitContext {
   readonly prefix: string;
   readonly scope: TreeScope;
   readonly snapshot: RepoSnapshot;
+  readonly running: boolean;
   readonly isOpen: (key: string) => boolean;
 }
 
 /** ディレクトリを先に、葉を後に。どちらも名前で辞書順 (docs/specs/ui.md) */
 function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
-  const { depth, prefix, scope, snapshot, isOpen } = context;
+  const { depth, prefix, scope, snapshot, running, isOpen } = context;
   const repoId = snapshot.id;
 
   const directories = [...node.directories.entries()].sort(([left], [right]) =>
@@ -134,6 +138,7 @@ function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
       key,
       depth: clampDepth(depth),
       repoId,
+      running,
       scope,
       label: name,
       expanded: isOpen(key),
@@ -153,6 +158,7 @@ function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
         key,
         depth: clampDepth(depth),
         repoId,
+        running,
         branch,
         label: leaf.label,
         dirtyCount: changesForBranch(snapshot, branch)?.total ?? 0,
@@ -165,6 +171,7 @@ function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
       key,
       depth: clampDepth(depth),
       repoId,
+      running,
       reference: leaf.item,
       label: leaf.label,
     });

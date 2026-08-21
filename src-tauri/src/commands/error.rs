@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Serialize, Serializer};
 
 use crate::git::GitError;
+use crate::ops::OpError;
 use crate::state::StateError;
 use crate::store::UnknownRepo;
 
@@ -44,6 +45,12 @@ impl From<GitError> for CommandError {
 
 impl From<StateError> for CommandError {
     fn from(source: StateError) -> Self {
+        Self(source.to_string())
+    }
+}
+
+impl From<OpError> for CommandError {
+    fn from(source: OpError) -> Self {
         Self(source.to_string())
     }
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
-import { makeSnapshot } from "@/test/factories";
+import { makeCommandResult, makeSnapshot } from "@/test/factories";
 
 import { createRepoStore, orderedRepos, type RepoStoreState } from "./useRepoStore";
 
@@ -135,5 +135,107 @@ describe("リポジトリのストア", () => {
     state().setOrder(["r404", "r1"]);
 
     expect(state().order).toEqual(["r1"]);
+  });
+
+  describe("実行中", () => {
+    /** 実行中は本数が正で、`orderedRepos` が写す */
+    const runningOf = (id: string): boolean | undefined =>
+      orderedRepos(state()).find((repo) => repo.id === id)?.running;
+
+    beforeEach(() => {
+      state().registerAll([registration("r1", "a"), registration("r2", "b")]);
+    });
+
+    it("始めたリポジトリだけ実行中になる", () => {
+      state().beginRun("r1");
+
+      expect(runningOf("r1")).toBe(true);
+      expect(runningOf("r2")).toBe(false);
+    });
+
+    it("終わったら解ける", () => {
+      state().beginRun("r1");
+      state().endRun("r1");
+
+      expect(runningOf("r1")).toBe(false);
+    });
+
+    /**
+     * 一括フェッチとユーザーの操作が重なったとき、真偽値で持つと
+     * 先に終わった方が実行中の表示を消してしまう
+     */
+    it("2 本重なったら、両方終わるまで解けない", () => {
+      state().beginRun("r1");
+      state().beginRun("r1");
+
+      state().endRun("r1");
+      expect(runningOf("r1")).toBe(true);
+
+      state().endRun("r1");
+      expect(runningOf("r1")).toBe(false);
+    });
+
+    it("余分に終了しても負にならない", () => {
+      state().endRun("r1");
+      state().endRun("r1");
+      state().beginRun("r1");
+
+      expect(runningOf("r1")).toBe(true);
+      state().endRun("r1");
+      expect(runningOf("r1")).toBe(false);
+    });
+
+    /**
+     * **`RepoState` を作り直す経路で実行中を落とさない。**
+     * 手で写す形だと、経路を足すたびに写し忘れが増える
+     */
+    it("スナップショットが届いても、登録し直しても実行中のまま", () => {
+      state().beginRun("r1");
+
+      state().applySnapshot(makeSnapshot({ id: "r1", revision: 2 }));
+      expect(runningOf("r1")).toBe(true);
+
+      state().register(registration("r1", "a"));
+      expect(runningOf("r1")).toBe(true);
+
+      state().registerAll([registration("r1", "a"), registration("r2", "b")]);
+      expect(runningOf("r1")).toBe(true);
+    });
+
+    it("同じ状態なら同じオブジェクトを返す (無駄な再描画を起こさない)", () => {
+      const before = orderedRepos(state());
+
+      const after = orderedRepos(state());
+
+      expect(after[0]).toBe(before[0]);
+    });
+  });
+
+  describe("最後の結果", () => {
+    beforeEach(() => {
+      state().registerAll([registration("r1", "a")]);
+    });
+
+    it("リポジトリごとに覚える", () => {
+      state().setResult("r1", makeCommandResult({ message: "フェッチしました" }));
+
+      expect(state().lastResult.get("r1")?.message).toBe("フェッチしました");
+    });
+
+    it("知らない id では覚えない", () => {
+      state().setResult("r404", makeCommandResult());
+
+      expect(state().lastResult.has("r404")).toBe(false);
+    });
+
+    it("リストから削除したら結果も実行中も消す", () => {
+      state().beginRun("r1");
+      state().setResult("r1", makeCommandResult());
+
+      state().remove("r1");
+
+      expect(state().lastResult.has("r1")).toBe(false);
+      expect(state().running.has("r1")).toBe(false);
+    });
   });
 });

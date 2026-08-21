@@ -40,6 +40,19 @@ export function leafKey(repoId: RepoId, scope: TreeScope, name: string): string 
   return `${repoId}|${scope}|leaf|${name}`;
 }
 
+/**
+ * 名前を変えたあとの、同じ行の鍵。
+ *
+ * 名前を変更したら新しい名前の行を選択したままにする (docs/specs/ui.md の
+ * 「操作したあとの更新」)。**ブランチ名には `|` が入り得る**ので
+ * `split("|")` で分解せず、`leaf|` までを前方一致で残す。
+ */
+export function renamedLeafKey(key: string, newName: string): string {
+  const marker = "|leaf|";
+  const at = key.indexOf(marker);
+  return at < 0 ? key : `${key.slice(0, at + marker.length)}${newName}`;
+}
+
 /** `key` の配下の鍵か。自分自身は含まない */
 export function isUnder(candidate: string, key: string): boolean {
   if (candidate === key) return false;

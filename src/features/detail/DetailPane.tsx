@@ -1,5 +1,6 @@
 import type { Branch } from "@/ipc/generated/Branch";
 import type { ChangeList } from "@/ipc/generated/ChangeList";
+import type { CommandResult } from "@/ipc/generated/CommandResult";
 import type { RepoSnapshot } from "@/ipc/generated/RepoSnapshot";
 import type { BranchRow, RefRow, RepoRow, RowNode } from "@/ipc/types";
 import { useNow } from "@/shared/hooks/useNow";
@@ -7,6 +8,14 @@ import { changesForBranch, worktreeName } from "@/shared/lib/branchView";
 import { FILE_LIMIT } from "@/shared/lib/changeList";
 import { classNames } from "@/shared/lib/classNames";
 import { formatRelativeTime } from "@/shared/lib/relativeTime";
+import {
+  canCheckout,
+  canCheckoutAndPull,
+  canFetch,
+  canPull,
+  canPush,
+  canRemoveRepo,
+} from "@/shared/lib/selection";
 import { shortenHome } from "@/shared/lib/shortenHome";
 import { repoTotals } from "@/shared/lib/totals";
 import { ScrollArea } from "@/shared/ui/ScrollArea";
@@ -21,18 +30,35 @@ import styles from "./DetailPane.module.css";
  * 出す項目は docs/specs/ui.md の「詳細ペイン」の表どおり。
  * **タグとリモートブランチに「追跡」と「差分」は出さない** (モックは出しているが誤り)。
  *
- * ボタンは置くが、フェーズ 1 で動くのは「リストから削除」だけ。
- * git を実行するものはフェーズ 2 で繋ぐ。
+ * ボタンの有効条件は `shared/lib/selection.ts` の述語に寄せる。
+ * サイドバーとコンテキストメニューが同じ判定を使う。
+ *
+ * 一番下の「最後の結果」は**フェーズ 2 限りの表示。** コンソールとトーストが
+ * 入るフェーズ 3 で置き換える (docs/plans/phase-2-write.md)。
  */
+
+/** 詳細ペインのボタンから起こす操作 */
+export interface DetailActions {
+  readonly onFetch: (row: RowNode) => void;
+  readonly onPull: (row: RowNode) => void;
+  readonly onCheckout: (row: RowNode) => void;
+  readonly onCheckoutAndPull: (row: RowNode) => void;
+  readonly onPush: (row: BranchRow) => void;
+  readonly onCopy: (repoId: string, text: string) => void;
+  readonly onRemoveRepo: (repoId: string) => void;
+}
 
 interface DetailPaneProps {
   /** 画面に見えている選択行。見えていなければ null */
   readonly row: RowNode | null;
-  readonly onRemoveRepo: (repoId: string) => void;
+  readonly actions: DetailActions;
 }
 
-export function DetailPane({ row, onRemoveRepo }: DetailPaneProps) {
+export function DetailPane({ row, actions }: DetailPaneProps) {
   const repo = useRepoStore((state) => (row === null ? undefined : state.byId.get(row.repoId)));
+  const result = useRepoStore((state) =>
+    row === null ? undefined : state.lastResult.get(row.repoId),
+  );
   const snapshot = repo?.snapshot ?? null;
 
   if (row === null || row.kind === "section" || row.kind === "directory") {
@@ -45,7 +71,8 @@ export function DetailPane({ row, onRemoveRepo }: DetailPaneProps) {
       return (
         <div className={styles.pane}>
           <div className={styles.body}>
-            <PendingRepositoryDetail row={row} onRemoveRepo={onRemoveRepo} />
+            <PendingRepositoryDetail row={row} onRemoveRepo={actions.onRemoveRepo} />
+            <LastResult result={result} />
           </div>
         </div>
       );
@@ -57,14 +84,41 @@ export function DetailPane({ row, onRemoveRepo }: DetailPaneProps) {
     <ScrollArea className={styles.pane}>
       <div className={styles.body}>
         {row.kind === "repo" ? (
-          <RepositoryDetail row={row} snapshot={snapshot} onRemoveRepo={onRemoveRepo} />
+          <RepositoryDetail row={row} snapshot={snapshot} actions={actions} />
         ) : row.kind === "branch" ? (
-          <BranchDetail row={row} snapshot={snapshot} />
+          <BranchDetail row={row} snapshot={snapshot} actions={actions} />
         ) : (
-          <ReferenceDetail row={row} snapshot={snapshot} />
+          <ReferenceDetail row={row} snapshot={snapshot} actions={actions} />
         )}
+        <LastResult result={result} />
       </div>
     </ScrollArea>
+  );
+}
+
+/**
+ * 直近の操作の結果。
+ *
+ * **フェーズ 3 でコンソールとトーストに置き換える。** それまで結果が
+ * どこにも出ないと、失敗したのかどうかが分からない
+ * (docs/plans/phase-2-write.md の「決めたこと」)。
+ */
+function LastResult({ result }: { readonly result: CommandResult | undefined }) {
+  if (result === undefined) return null;
+  // **色は `kind` で決める。** 省略は失敗ではないので赤で出さない
+  const failed = result.kind !== "skipped" && !result.ok;
+  return (
+    <>
+      <div className={styles.section}>最後の結果</div>
+      <div className={classNames(styles.result, failed ? styles.resultFailed : styles.resultOk)}>
+        {result.message ?? (result.ok ? "成功しました" : "失敗しました")}
+      </div>
+      {result.steps.map((step) => (
+        <div className={styles.command} key={step.command} title={step.command}>
+          {step.command}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -122,10 +176,10 @@ function PendingRepositoryDetail({
 interface RepositoryDetailProps {
   readonly row: RepoRow;
   readonly snapshot: RepoSnapshot;
-  readonly onRemoveRepo: (repoId: string) => void;
+  readonly actions: DetailActions;
 }
 
-function RepositoryDetail({ row, snapshot, onRemoveRepo }: RepositoryDetailProps) {
+function RepositoryDetail({ row, snapshot, actions }: RepositoryDetailProps) {
   const totals = repoTotals(snapshot);
   const current =
     snapshot.head.kind === "branch" ? snapshot.head.name : `detached (${snapshot.head.name})`;
@@ -149,16 +203,39 @@ function RepositoryDetail({ row, snapshot, onRemoveRepo }: RepositoryDetailProps
         </dd>
       </dl>
       <div className={styles.actions}>
-        <button type="button" className={styles.primary}>
+        <button
+          type="button"
+          className={styles.primary}
+          disabled={!canFetch(row)}
+          onClick={() => {
+            actions.onFetch(row);
+          }}
+        >
           フェッチ
         </button>
-        <button type="button">プル</button>
-        <button type="button">パスをコピー</button>
+        <button
+          type="button"
+          disabled={!canPull(row)}
+          onClick={() => {
+            actions.onPull(row);
+          }}
+        >
+          プル
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            actions.onCopy(row.repoId, snapshot.path);
+          }}
+        >
+          パスをコピー
+        </button>
         <button
           type="button"
           className={styles.danger}
+          disabled={!canRemoveRepo(row)}
           onClick={() => {
-            onRemoveRepo(row.repoId);
+            actions.onRemoveRepo(row.repoId);
           }}
         >
           リストから削除
@@ -172,9 +249,11 @@ function RepositoryDetail({ row, snapshot, onRemoveRepo }: RepositoryDetailProps
 function BranchDetail({
   row,
   snapshot,
+  actions,
 }: {
   readonly row: BranchRow;
   readonly snapshot: RepoSnapshot;
+  readonly actions: DetailActions;
 }) {
   const now = useNow();
   const { branch } = row;
@@ -221,21 +300,66 @@ function BranchDetail({
       <div className={styles.actions}>
         {branch.is_current ? (
           <>
-            <button type="button" className={styles.primary}>
+            <button
+              type="button"
+              className={styles.primary}
+              disabled={!canPull(row)}
+              onClick={() => {
+                actions.onPull(row);
+              }}
+            >
               プル
             </button>
-            <button type="button">プッシュ</button>
+            <button
+              type="button"
+              disabled={!canPush(row)}
+              onClick={() => {
+                actions.onPush(row);
+              }}
+            >
+              プッシュ
+            </button>
           </>
         ) : (
           <>
-            <button type="button" className={styles.primary}>
+            <button
+              type="button"
+              className={styles.primary}
+              disabled={!canCheckout(row)}
+              onClick={() => {
+                actions.onCheckout(row);
+              }}
+            >
               チェックアウト
             </button>
-            <button type="button">チェックアウトとプル</button>
-            <button type="button">プッシュ</button>
+            <button
+              type="button"
+              disabled={!canCheckoutAndPull(row)}
+              onClick={() => {
+                actions.onCheckoutAndPull(row);
+              }}
+            >
+              チェックアウトとプル
+            </button>
+            <button
+              type="button"
+              disabled={!canPush(row)}
+              onClick={() => {
+                actions.onPush(row);
+              }}
+            >
+              プッシュ
+            </button>
           </>
         )}
-        <button type="button">名前をコピー</button>
+        <button
+          type="button"
+          onClick={() => {
+            actions.onCopy(row.repoId, branch.name);
+          }}
+        >
+          名前をコピー
+        </button>
       </div>
       {changes !== null && <FileList changes={changes} />}
     </>
@@ -251,9 +375,11 @@ function BranchDetail({
 function ReferenceDetail({
   row,
   snapshot,
+  actions,
 }: {
   readonly row: RefRow;
   readonly snapshot: RepoSnapshot;
+  readonly actions: DetailActions;
 }) {
   const now = useNow();
   const isTag = row.kind === "tag";
@@ -271,10 +397,24 @@ function ReferenceDetail({
         <dd>{formatRelativeTime(row.reference.committed_at, now)}</dd>
       </dl>
       <div className={styles.actions}>
-        <button type="button" className={styles.primary}>
+        <button
+          type="button"
+          className={styles.primary}
+          disabled={!canCheckout(row)}
+          onClick={() => {
+            actions.onCheckout(row);
+          }}
+        >
           チェックアウト
         </button>
-        <button type="button">{isTag ? "タグ名をコピー" : "名前をコピー"}</button>
+        <button
+          type="button"
+          onClick={() => {
+            actions.onCopy(row.repoId, row.reference.name);
+          }}
+        >
+          {isTag ? "タグ名をコピー" : "名前をコピー"}
+        </button>
       </div>
     </>
   );

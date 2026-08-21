@@ -25,7 +25,7 @@ tauri-plugin-dialog = "2"
 # 子プロセスと排他。同期の Command を使わない (docs/adr/0009-concurrency-and-refresh.md)。
 # macros は try_join! に要る。dev-dependencies だけに書くと、cargo test では通って
 # 本体のビルドだけが落ちる (docs/pitfalls.md)
-tokio = { version = "1", features = ["macros", "process", "sync"] }
+tokio = { version = "1", features = ["macros", "process", "sync", "time"] }
 # Rust の struct から TypeScript の型を生成する (docs/adr/0013-type-generation.md)
 ts-rs = "12"
 

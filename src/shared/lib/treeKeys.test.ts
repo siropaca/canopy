@@ -12,6 +12,7 @@ import {
   isUnder,
   leafKey,
   open,
+  renamedLeafKey,
   repoKey,
   sectionKey,
 } from "./treeKeys";
@@ -42,6 +43,7 @@ function repoState(id: string, local: string[]) {
     status: "ready" as const,
     snapshot: snapshot({ id, local: local.map((name) => branch(name)) }),
     error: null,
+    running: false,
   };
 }
 
@@ -235,6 +237,23 @@ describe("allKeys", () => {
   });
 });
 
+describe("renamedLeafKey", () => {
+  it("葉の名前だけを差し替える", () => {
+    expect(renamedLeafKey("r1|local|leaf|develop", "trunk")).toBe("r1|local|leaf|trunk");
+    expect(renamedLeafKey("r1|local|leaf|feature/a", "feature/b")).toBe("r1|local|leaf|feature/b");
+  });
+
+  /** **ブランチ名には `|` が入れられる** (docs/specs/data-model.md) */
+  it("名前に `|` が入っていても壊れない", () => {
+    expect(renamedLeafKey("r1|local|leaf|a|b", "c|d")).toBe("r1|local|leaf|c|d");
+  });
+
+  it("葉ではない鍵はそのまま返す", () => {
+    expect(renamedLeafKey("r1|local|feature", "x")).toBe("r1|local|feature");
+    expect(renamedLeafKey("r1|repo|", "x")).toBe("r1|repo|");
+  });
+});
+
 describe("allKeysOf", () => {
   it("全リポジトリの鍵を集める", () => {
     const keys = allKeysOf([repoState("r1", ["feature/a"]), repoState("r2", ["main"])], ["local"]);
@@ -256,6 +275,7 @@ describe("allKeysOf", () => {
       status: "loading" as const,
       snapshot: null,
       error: null,
+      running: false,
     };
 
     expect(allKeysOf([loading], ["local"])).toEqual(["r9|repo|"]);

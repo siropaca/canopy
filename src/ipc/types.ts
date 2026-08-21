@@ -30,6 +30,14 @@ export interface RepoState {
   readonly snapshot: RepoSnapshot | null;
   /** `error` のときだけ入る */
   readonly error: string | null;
+  /**
+   * このリポジトリに実行中の操作があるか。
+   *
+   * **正はここ。** 実行中はそのリポジトリの操作系 UI を無効にする
+   * (docs/specs/ui.md の「実行中の扱い」)。判定は
+   * `shared/lib/selection.ts` の述語を通す。
+   */
+  readonly running: boolean;
 }
 
 /** ツリーの括り。折りたたみキーのスコープでもある */
@@ -41,6 +49,13 @@ interface RowBase {
   /** インデントの段数。`data-depth` に出す */
   readonly depth: number;
   readonly repoId: RepoId;
+  /**
+   * そのリポジトリに実行中の操作があるか。`RepoState.running` を写したもの。
+   *
+   * 行に持たせているのは、述語 (`shared/lib/selection.ts`) を行だけで
+   * 判定できるようにするため。`dirtyCount` と同じ扱いで、正はストア側。
+   */
+  readonly running: boolean;
 }
 
 /**

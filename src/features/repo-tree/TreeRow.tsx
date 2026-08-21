@@ -2,7 +2,7 @@ import { memo } from "react";
 
 import type { RepoRow, RowNode } from "@/ipc/types";
 import { classNames } from "@/shared/lib/classNames";
-import { isFoldable } from "@/shared/lib/selection";
+import { canCheckout, hasMenu, isFoldable } from "@/shared/lib/selection";
 import { repoTotals } from "@/shared/lib/totals";
 import {
   AheadIcon,
@@ -30,10 +30,22 @@ interface TreeRowProps {
   readonly selected: boolean;
   readonly onSelect: (key: string) => void;
   readonly onToggle: (key: string) => void;
+  /** ダブルクリック。折りたためない行はチェックアウト (docs/specs/ui.md の「操作」) */
+  readonly onActivate: (row: RowNode) => void;
+  readonly onContextMenu: (row: RowNode, at: { readonly x: number; readonly y: number }) => void;
 }
 
-export const TreeRow = memo(function TreeRow({ row, selected, onSelect, onToggle }: TreeRowProps) {
-  const dimmed = row.kind === "repo" && (row.repo.status === "error" || !row.matched);
+export const TreeRow = memo(function TreeRow({
+  row,
+  selected,
+  onSelect,
+  onToggle,
+  onActivate,
+  onContextMenu,
+}: TreeRowProps) {
+  // 実行中の行は薄くする。スピナーは出さない (docs/specs/ui.md の「実行中の扱い」)
+  const dimmed =
+    row.running || (row.kind === "repo" && (row.repo.status === "error" || !row.matched));
   const className = classNames(
     styles.row,
     row.kind === "repo" && styles.heading,
@@ -50,8 +62,18 @@ export const TreeRow = memo(function TreeRow({ row, selected, onSelect, onToggle
         onSelect(row.key);
       }}
       onDoubleClick={() => {
-        // ブランチとタグのダブルクリック (チェックアウト) はフェーズ 2
-        if (isFoldable(row)) onToggle(row.key);
+        if (isFoldable(row)) {
+          onToggle(row.key);
+          return;
+        }
+        // 実行中と `⧉` 付きは `canCheckout` が false を返す
+        if (canCheckout(row)) onActivate(row);
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onSelect(row.key);
+        // 括りとディレクトリではメニューを出さない (選択だけ)
+        if (hasMenu(row)) onContextMenu(row, { x: event.clientX, y: event.clientY });
       }}
     >
       <RowContent row={row} onToggle={onToggle} />

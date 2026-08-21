@@ -7,8 +7,8 @@ import styles from "./Sidebar.module.css";
 /*
  * 左のアイコンツールバー。並びと有効条件は docs/specs/ui.md の「サイドバー」。
  *
- * フェーズ 1 で動くのは、展開・折りたたみとリポジトリの追加・削除だけ。
- * git を実行するものはフェーズ 2、コンソールはフェーズ 3。
+ * コンソールとツリー表示のトグルはフェーズ 3。
+ * フェッチは選択があればそのリポジトリ、無ければ全リポジトリ (docs/specs/ui.md)。
  *
  * ツールチップは `title` 属性で出す。モックのような自前の吹き出しはフェーズ 4。
  */
@@ -18,9 +18,13 @@ interface SidebarProps {
   readonly selectedKind: RowNode["kind"] | null;
   /** 「選択対象をプル」を有効にできるか (shared/lib/selection.ts) */
   readonly pullEnabled: boolean;
+  /** 選択中のリポジトリに実行中の操作があると無効 */
+  readonly fetchEnabled: boolean;
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
+  readonly onFetch: () => void;
+  readonly onPull: () => void;
   readonly onExpandLocal: () => void;
   readonly onExpandAll: () => void;
   readonly onCollapseAll: () => void;
@@ -31,9 +35,12 @@ interface SidebarProps {
 export function Sidebar({
   selectedKind,
   pullEnabled,
+  fetchEnabled,
   groupDirectories,
   localOnly,
   consoleOpen,
+  onFetch,
+  onPull,
   onExpandLocal,
   onExpandAll,
   onCollapseAll,
@@ -48,10 +55,10 @@ export function Sidebar({
       <Button label="ブランチの削除" v2>
         <icons.DeleteBranch />
       </Button>
-      <Button label="フェッチ">
+      <Button label="フェッチ" disabled={!fetchEnabled} onClick={onFetch}>
         <icons.Fetch />
       </Button>
-      <Button label="選択対象をプル" disabled={!pullEnabled}>
+      <Button label="選択対象をプル" disabled={!pullEnabled} onClick={onPull}>
         <icons.Pull />
       </Button>
 

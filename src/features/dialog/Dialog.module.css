@@ -1,0 +1,97 @@
+/* 共通の枠。見え方はモック (docs/mock/tree.tmpl.html の `.modal`) */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22vh;
+  /* オーバーレイの黒は色ではなく効果なのでトークンにしない (docs/design-system.md) */
+  background: rgb(0 0 0 / 40%);
+}
+
+.box {
+  width: 440px;
+  padding: 0 0 14px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 60%);
+}
+
+.wide {
+  width: 620px;
+}
+
+.titleBar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--overlay-line);
+}
+
+.title {
+  font-weight: 600;
+}
+
+.body {
+  padding: 14px 20px 0;
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 16px 20px 0;
+}
+
+.buttons button {
+  height: 30px;
+  padding: 0 16px;
+  color: var(--fg);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+}
+
+.buttons button:hover {
+  background: var(--btn-face);
+}
+
+/*
+ * 無効なボタン。**プライマリの地も外す。**
+ * 濃い青の上に `--disabled` の文字を乗せると、押せるように見えて読めない
+ */
+.buttons button[disabled],
+.buttons button[disabled]:hover {
+  color: var(--disabled);
+  background: transparent;
+  border-color: var(--border);
+  cursor: default;
+}
+
+.primary {
+  color: var(--fg-strong);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.primary:hover {
+  background: var(--accent-hover);
+}
+
+/* 状態のクラスは基本のクラスより後ろに書く。特異性が同じなら後が勝つ */
+.danger,
+.primary.danger {
+  color: var(--fg-strong);
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.danger:hover,
+.primary.danger:hover {
+  background: var(--danger-hover);
+}

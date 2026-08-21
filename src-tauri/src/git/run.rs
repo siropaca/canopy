@@ -1,10 +1,12 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::time::Duration;
 
 use tokio::process::Command;
 
 use super::parse::ParseError;
+use super::validate::{ObjectNameError, RefNameError};
 use crate::store::RepoPath;
 
 /// PATH built by hand.
@@ -29,6 +31,11 @@ pub struct GitOutput {
     pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+    /// Whether the run was killed for taking too long.
+    ///
+    /// 打ち切りは終了コードでは見分けられない (シグナルで死んでも `None`)。
+    /// 文言を出し分けるので独立して持つ。
+    pub timed_out: bool,
 }
 
 impl GitOutput {
@@ -59,11 +66,27 @@ pub enum GitError {
     },
     /// git ran but its output could not be read.
     Parse(ParseError),
+    /// A reference argument did not pass validation.
+    RefName(RefNameError),
+    /// A sha argument did not pass validation.
+    ObjectName(ObjectNameError),
 }
 
 impl From<ParseError> for GitError {
     fn from(source: ParseError) -> Self {
         Self::Parse(source)
+    }
+}
+
+impl From<RefNameError> for GitError {
+    fn from(source: RefNameError) -> Self {
+        Self::RefName(source)
+    }
+}
+
+impl From<ObjectNameError> for GitError {
+    fn from(source: ObjectNameError) -> Self {
+        Self::ObjectName(source)
     }
 }
 
@@ -90,6 +113,8 @@ impl fmt::Display for GitError {
                 write!(f, "{command} が失敗しました (exit {code}): {reason}")
             }
             Self::Parse(source) => write!(f, "{source}"),
+            Self::RefName(source) => write!(f, "{source}"),
+            Self::ObjectName(source) => write!(f, "{source}"),
         }
     }
 }
@@ -143,12 +168,9 @@ fn build_args<'a>(args: &[&'a str]) -> Vec<&'a str> {
     all
 }
 
-/// Run git in `dir`.
-///
-/// 引数は配列で渡す。シェルを経由しない。環境変数は固定する
-/// (docs/security.md の「外部コマンドの実行」)。
-pub async fn run(dir: &RepoPath, args: &[&str]) -> Result<GitOutput, GitError> {
-    let command = format_command(args);
+/// Build the child process. 引数は配列で渡す。シェルを経由しない。
+/// 環境変数は固定する (docs/security.md の「外部コマンドの実行」)。
+fn build_command(dir: &RepoPath, args: &[&str]) -> Result<Command, GitError> {
     let path = dir.as_path();
     if !path.is_dir() {
         return Err(GitError::MissingDirectory {
@@ -161,21 +183,71 @@ pub async fn run(dir: &RepoPath, args: &[&str]) -> Result<GitOutput, GitError> {
         .args(build_args(args))
         .current_dir(path)
         // 標準入力を閉じる。認証やエディタの待ちで固まらせない
-        .stdin(Stdio::null());
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        // 打ち切ったときに子プロセスを残さない。`wait_with_output` の future を
+        // 落とすと `Child` も落ちるので、そこで kill が走る
+        .kill_on_drop(true);
     for (name, value) in build_env() {
         command_line.env(name, value);
     }
     for name in REMOVED_ENV {
         command_line.env_remove(name);
     }
+    Ok(command_line)
+}
 
-    let output = command_line
-        .output()
-        .await
+/// Run git in `dir`. 締め切りは持たない (ローカルの操作用)。
+pub async fn run(dir: &RepoPath, args: &[&str]) -> Result<GitOutput, GitError> {
+    run_inner(dir, args, None).await
+}
+
+/// Run git in `dir`, killing it after `limit`.
+///
+/// ネットワーク操作に使う。VPN 切断や機内では 1 本あたり 75 秒前後ブロックして、
+/// その間キューが詰まる (docs/adr/0009-concurrency-and-refresh.md)。
+pub async fn run_within(
+    dir: &RepoPath,
+    args: &[&str],
+    limit: Duration,
+) -> Result<GitOutput, GitError> {
+    run_inner(dir, args, Some(limit)).await
+}
+
+async fn run_inner(
+    dir: &RepoPath,
+    args: &[&str],
+    limit: Option<Duration>,
+) -> Result<GitOutput, GitError> {
+    let command = format_command(args);
+    let child = build_command(dir, args)?
+        .spawn()
         .map_err(|source| GitError::Spawn {
             command: command.clone(),
             source,
         })?;
+
+    let waited = match limit {
+        Some(limit) => match tokio::time::timeout(limit, child.wait_with_output()).await {
+            Ok(waited) => waited,
+            Err(_) => {
+                return Ok(GitOutput {
+                    command,
+                    code: None,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    timed_out: true,
+                });
+            }
+        },
+        None => child.wait_with_output().await,
+    };
+
+    let output = waited.map_err(|source| GitError::Spawn {
+        command: command.clone(),
+        source,
+    })?;
 
     Ok(GitOutput {
         command,
@@ -184,6 +256,7 @@ pub async fn run(dir: &RepoPath, args: &[&str]) -> Result<GitOutput, GitError> {
         // スナップショット全体を落とさない
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        timed_out: false,
     })
 }
 
@@ -273,6 +346,35 @@ mod tests {
             "{error}"
         );
         assert_eq!(error.to_string(), "ディレクトリが見つかりません");
+    }
+
+    /// 締め切りを過ぎたら打ち切る。終了コードでは見分けられないので
+    /// `timed_out` で返す (docs/adr/0009-concurrency-and-refresh.md)
+    #[tokio::test]
+    async fn reports_a_run_that_was_killed_for_taking_too_long() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = repo_path_for_test(directory.path());
+
+        let output = run_within(&path, &["status"], Duration::ZERO)
+            .await
+            .expect("a killed run is a result, not an error");
+
+        assert!(output.timed_out);
+        assert!(!output.is_ok());
+        assert_eq!(output.code, None);
+        assert_eq!(output.command, "git status");
+    }
+
+    /// 締め切りを持たない実行は打ち切られない
+    #[tokio::test]
+    async fn does_not_mark_an_ordinary_run_as_timed_out() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = repo_path_for_test(directory.path());
+
+        let output = run(&path, &["--version"]).await.expect("git runs");
+
+        assert!(!output.timed_out);
+        assert!(output.is_ok());
     }
 
     /// テスト用に `RepoPath` を作る。登録済みのリポジトリを 1 件だけ持つ

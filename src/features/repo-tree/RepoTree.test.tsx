@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RowNode } from "@/ipc/types";
 import { flatten } from "@/shared/lib/flattenTree";
@@ -29,7 +29,9 @@ describe("ツリー領域", () => {
   });
 
   it("読み終える前は何も出さない。「登録されていません」を一瞬出さない", () => {
-    const { container } = render(<RepoTree rows={[]} />);
+    const { container } = render(
+      <RepoTree rows={[]} onActivate={vi.fn()} onContextMenu={vi.fn()} />,
+    );
 
     expect(container.textContent).toBe("");
   });
@@ -37,7 +39,7 @@ describe("ツリー領域", () => {
   it("登録が 0 件なら、その旨を出す", () => {
     useRepoStore.setState({ byId: new Map(), order: [], loaded: true, loadError: null });
 
-    render(<RepoTree rows={[]} />);
+    render(<RepoTree rows={[]} onActivate={vi.fn()} onContextMenu={vi.fn()} />);
 
     expect(screen.getByText("リポジトリが登録されていません")).toBeDefined();
   });
@@ -50,7 +52,7 @@ describe("ツリー領域", () => {
       loadError: "設定の中身が壊れています (canopy.json)",
     });
 
-    render(<RepoTree rows={rowsOfOneRepo()} />);
+    render(<RepoTree rows={rowsOfOneRepo()} onActivate={vi.fn()} onContextMenu={vi.fn()} />);
 
     expect(screen.getByText("設定の中身が壊れています (canopy.json)")).toBeDefined();
   });

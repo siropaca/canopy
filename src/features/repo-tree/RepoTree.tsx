@@ -22,9 +22,11 @@ import { TreeRow } from "./TreeRow";
 interface RepoTreeProps {
   /** 平坦にした行。組み立てるのは app 側 (詳細ペインと同じ配列を見る) */
   readonly rows: readonly RowNode[];
+  readonly onActivate: (row: RowNode) => void;
+  readonly onContextMenu: (row: RowNode, at: { readonly x: number; readonly y: number }) => void;
 }
 
-export function RepoTree({ rows }: RepoTreeProps) {
+export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
   const loadError = useRepoStore((state) => state.loadError);
   const loaded = useRepoStore((state) => state.loaded);
   const selectedKey = useUiStore((state) => state.selectedKey);
@@ -43,9 +45,11 @@ export function RepoTree({ rows }: RepoTreeProps) {
         selected={row.key === selectedKey}
         onSelect={select}
         onToggle={toggleExpanded}
+        onActivate={onActivate}
+        onContextMenu={onContextMenu}
       />
     ),
-    [selectedKey, select, toggleExpanded],
+    [selectedKey, select, toggleExpanded, onActivate, onContextMenu],
   );
 
   if (loadError !== null) {

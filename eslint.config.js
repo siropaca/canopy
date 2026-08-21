@@ -77,6 +77,13 @@ export default tseslint.config(
                 "shared は invoke を呼ばない。実行時に必要なら shared に上げる。型は import type で取る",
               allowTypeImports: true,
             },
+            {
+              // ラッパを迂回して invoke を直接呼ぶ道も塞ぐ。
+              // 塞がないと ipc/ を経由しない invoke が shared に生える
+              group: ["@tauri-apps/*", "@tauri-apps/**"],
+              message: "Tauri の API を直接呼ばない。ipc/ のラッパを通す (docs/architecture.md)",
+              allowTypeImports: true,
+            },
           ],
         },
       ],
@@ -94,6 +101,13 @@ export default tseslint.config(
               group: ["@/features/**", "**/features/**"],
               message: "features 同士を直接参照しない。共有するなら shared に上げる",
             },
+            {
+              // 隣のスライスを相対パスで借りる道も塞ぐ。`../sidebar/icons` は
+              // 上の group にマッチしない
+              group: ["../*/*", "../*"],
+              message:
+                "隣の features を相対パスで参照しない。共有するなら shared に上げる (docs/architecture.md)",
+            },
             { group: ["@/app/**"], message: "features は app を知らない" },
           ],
         },
@@ -101,7 +115,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/ipc/**", "src/store/**"],
+    files: ["src/store/**"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -109,7 +123,25 @@ export default tseslint.config(
           patterns: [
             {
               group: ["@/app/**", "@/features/**", "**/features/**"],
-              message: "ipc / store は app と features を知らない (docs/architecture.md)",
+              message: "store は app と features を知らない (docs/architecture.md)",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // ipc は store より下。**ストアを読ませない。**
+    // 読ませると store <-> ipc の循環ができて、`revision` の比較が 2 箇所に分かれる
+    files: ["src/ipc/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/app/**", "@/features/**", "**/features/**", "@/store/**"],
+              message: "ipc は app / features / store を知らない (docs/architecture.md)",
             },
           ],
         },

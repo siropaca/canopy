@@ -1,6 +1,9 @@
 pub mod commands;
 pub mod git;
 pub mod model;
+pub mod op_kind;
+pub mod ops;
+pub mod os;
 pub mod queue;
 pub mod state;
 pub mod store;
@@ -37,12 +40,25 @@ fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 pub fn invoke_handler<R: tauri::Runtime>()
 -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
-        commands::repo::list_repos,
-        commands::repo::get_ui_state,
-        commands::repo::save_ui_state,
-        commands::repo::add_repo,
-        commands::repo::remove_repo,
-        commands::repo::get_repo_snapshot,
+        commands::settings::list_repos,
+        commands::settings::get_ui_state,
+        commands::settings::save_ui_state,
+        commands::settings::add_repo,
+        commands::settings::remove_repo,
+        commands::snapshot::get_repo_snapshot,
+        commands::ops::fetch_repo,
+        commands::ops::fetch_all,
+        commands::ops::pull_current,
+        commands::ops::fast_forward_branch,
+        commands::ops::checkout_branch,
+        commands::ops::checkout_tag,
+        commands::ops::checkout_and_pull,
+        commands::ops::checkout_previous,
+        commands::ops::push_branch,
+        commands::ops::rename_branch,
+        commands::ops::get_push_preview,
+        commands::ops::reveal_in_finder,
+        commands::ops::open_in_terminal,
     ]
 }
 

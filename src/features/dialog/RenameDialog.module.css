@@ -1,0 +1,29 @@
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.row label {
+  color: var(--fg);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--fg);
+  font: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

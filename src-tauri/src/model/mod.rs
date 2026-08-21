@@ -5,6 +5,7 @@
 
 mod branch;
 mod change;
+mod command;
 mod head;
 mod reference;
 mod registration;
@@ -14,6 +15,9 @@ mod worktree;
 
 pub use branch::Branch;
 pub use change::{Change, ChangeList};
+pub use command::{
+    CommandResult, CommandStep, Commit, OpOutcome, PushPreview, RepoUpdate, ResultKind,
+};
 pub use head::{Head, HeadKind};
 pub use reference::Ref;
 pub use registration::{AddRepoOutcome, RepoRegistration};

@@ -150,3 +150,37 @@
 .more {
   color: var(--disabled);
 }
+
+/*
+ * 無効なボタン。**プライマリの地も外す。**
+ * 濃い青の上に `--disabled` の文字を乗せると読めない (実機で確認)
+ */
+.actions button[disabled],
+.actions button[disabled]:hover {
+  color: var(--disabled);
+  background: transparent;
+  border-color: var(--border);
+  cursor: default;
+}
+
+/* 操作の結果。**コンソールとトーストはフェーズ 3** なので、当面ここに出す */
+.result {
+  margin-bottom: 4px;
+}
+
+.resultOk {
+  color: var(--fg);
+}
+
+.resultFailed {
+  color: var(--err-line);
+}
+
+.command {
+  overflow: hidden;
+  color: var(--out-dim);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -17,6 +17,16 @@ pub use repo_path::RepoPath;
 /// Bumped when the shape of the file changes.
 pub const SCHEMA_VERSION: u32 = 1;
 
+/// Application `open -a` hands the repository path to.
+///
+/// v1 に設定画面は無いので、変えるときは設定ファイルを直接編集する
+/// (docs/adr/0015-auxiliary-operations.md)。
+pub const DEFAULT_TERMINAL_APP: &str = "Terminal";
+
+fn default_terminal_app() -> String {
+    DEFAULT_TERMINAL_APP.to_owned()
+}
+
 /// One registered repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RepoEntry {
@@ -40,6 +50,12 @@ pub struct Registry {
     next_id: u32,
     repos: Vec<RepoEntry>,
     ui_state: UiState,
+    /// 「ターミナルで開く」が起動するアプリ。既定は macOS の Terminal。
+    ///
+    /// 増えた項目なので `serde(default)` を付ける。付けないと、この項目が無い
+    /// 既存の設定ファイルが「壊れている」と判定される。
+    #[serde(default = "default_terminal_app")]
+    terminal_app: String,
 }
 
 impl Default for Registry {
@@ -49,6 +65,7 @@ impl Default for Registry {
             next_id: 1,
             repos: Vec::new(),
             ui_state: UiState::default(),
+            terminal_app: default_terminal_app(),
         }
     }
 }
@@ -272,6 +289,10 @@ impl Registry {
         &self.ui_state
     }
 
+    pub fn terminal_app(&self) -> &str {
+        &self.terminal_app
+    }
+
     /// Replace the UI state. `repo_order` は登録済みの id だけに整える。
     pub fn set_ui_state(&mut self, ui_state: UiState) {
         self.ui_state = ui_state;
@@ -466,6 +487,22 @@ mod tests {
 
         assert_eq!(loaded.ui_state().expanded, vec![format!("{id}|repo|")]);
         assert_eq!(loaded.ui_state().repo_order, vec![id]);
+    }
+
+    /// 増えた項目が無い設定ファイルも読める。**壊れている扱いにしない**
+    #[test]
+    fn load_fills_in_a_setting_added_later() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("canopy.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"next_id":1,"repos":[],"ui_state":{"repo_order":[],"expanded":[],"pane_width":360,"console_open":false,"window":null,"group_directories":true,"local_only":false}}"#,
+        )
+        .expect("write");
+
+        let loaded = Registry::load(&path).expect("load should succeed");
+
+        assert_eq!(loaded.terminal_app(), DEFAULT_TERMINAL_APP);
     }
 
     /// ファイルが無いのは空の状態。エラーにしない

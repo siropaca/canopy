@@ -4,10 +4,18 @@ use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use super::CommandError;
-use crate::git::{build_snapshot, common_dir, toplevel};
-use crate::model::{AddRepoOutcome, RepoRegistration, RepoSnapshot, UiState};
+use crate::git::{common_dir, toplevel};
+use crate::model::{AddRepoOutcome, RepoRegistration, UiState};
 use crate::state::AppState;
 use crate::store::RepoPath;
+
+/*
+ * 設定の読み書きと、リポジトリの追加・削除。
+ *
+ * git を実行しないコマンドを集めている
+ * (docs/specs/git-operations.md の「git を使わない操作」)。
+ * 例外は `add_repo` で、登録できるフォルダかを見るために git を 2 回叩く。
+ */
 
 /// Registered repositories, in display order.
 #[tauri::command(rename_all = "snake_case")]
@@ -39,31 +47,6 @@ pub async fn save_ui_state(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn remove_repo(state: State<'_, AppState>, repo_id: String) -> Result<(), CommandError> {
     Ok(state.write(|registry| registry.remove(&repo_id)).await?)
-}
-
-/// Read one repository's state.
-///
-/// 失敗はこのリポジトリだけの `Err` にする。1 つの取得失敗で全体を落とさない
-/// (docs/specs/data-model.md の `RepoState`)。
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_repo_snapshot(
-    state: State<'_, AppState>,
-    repo_id: String,
-) -> Result<RepoSnapshot, CommandError> {
-    let located = state.locate(&repo_id).await?;
-    // 同時実行数を絞る。リポジトリを跨いだ読み取りは並列でよい
-    // (docs/adr/0009-concurrency-and-refresh.md)
-    let _permit = state.queue().read_permit().await;
-    let revision = state.queue().next_revision(&repo_id).await;
-
-    Ok(build_snapshot(
-        &repo_id,
-        &located.name,
-        &located.dir,
-        &located.common_dir,
-        revision,
-    )
-    .await?)
 }
 
 /// Open the folder picker and register what the user chose.

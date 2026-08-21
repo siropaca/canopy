@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "main ウィンドウに許可する権限。空でよい。自前のコマンド (#[tauri::command]) はローカル origin なら ACL を通らないので、invoke していても許可は要らない (docs/security.md の「IPC の境界」)。plugin と core: のコマンドを使う機能が出たフェーズで、必要な分だけ足す",
+  "description": "main ウィンドウに許可する権限。空でよい。自前のコマンド (#[tauri::command]) はローカル origin なら ACL を通らないので、invoke していても許可は要らない (docs/security.md の「IPC の境界」)。plugin と core: のコマンドを使う機能が出たフェーズで、必要な分だけ足す。`core:event:default` は一括フェッチの `repo_snapshot_updated` を listen するため (docs/adr/0009-concurrency-and-refresh.md)",
   "windows": ["main"],
-  "permissions": []
+  "permissions": ["core:event:default"]
 }

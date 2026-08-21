@@ -1,0 +1,84 @@
+/* 見え方はモック (docs/mock/tree.tmpl.html の `.menu`) に合わせる */
+
+.menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 230px;
+  max-width: 560px;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  /* 影は色ではなく効果なのでトークンにしない (docs/design-system.md) */
+  box-shadow: 0 6px 20px rgb(0 0 0 / 50%);
+  left: var(--menu-left, 0);
+  top: var(--menu-top, 0);
+}
+
+.item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 24px;
+  padding: 0 11px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: default;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.item:hover {
+  background: var(--selfoc);
+  color: var(--fg-strong);
+}
+
+.off {
+  color: var(--faint);
+}
+
+.off:hover {
+  background: transparent;
+  color: var(--faint);
+}
+
+.value {
+  margin-left: auto;
+  max-width: 320px;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item:hover .value {
+  color: var(--menu-key);
+}
+
+.arrow {
+  margin-left: auto;
+  color: var(--dim);
+}
+
+.item:hover .arrow {
+  color: var(--menu-key);
+}
+
+.separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.title {
+  height: 22px;
+  padding: 0 11px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 22px;
+}

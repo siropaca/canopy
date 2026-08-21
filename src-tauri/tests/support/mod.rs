@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use canopy_lib::model::RepoSnapshot;
+use canopy_lib::state::AppState;
 use canopy_lib::store::Registry;
 use tempfile::TempDir;
 
@@ -122,6 +123,44 @@ impl Fixture {
         canopy_lib::git::build_snapshot(&id, &name, &repo, &common_dir, revision)
             .await
             .expect("snapshot should build")
+    }
+
+    /// Register `dirs` and hand back a state the operation functions can use.
+    ///
+    /// `AppState::load` は Tauri 無しで作れるので、書き込み操作の合成
+    /// (`canopy_lib::ops`) をそのままテストできる。
+    pub async fn state(&self, dirs: &[&Path]) -> (AppState, Vec<String>) {
+        let mut registry = Registry::default();
+        let mut ids = Vec::new();
+        for dir in dirs {
+            ids.push(
+                self.add_to(&mut registry, dir)
+                    .await
+                    .expect("each repository registers"),
+            );
+        }
+        let settings = self.root.path().join("canopy.json");
+        registry.save(&settings).expect("save should succeed");
+        (AppState::load(settings), ids)
+    }
+
+    /// A second clone of the same `origin`, to move the remote forward.
+    pub async fn other_clone(&self, name: &str) -> PathBuf {
+        let path = self.root.path().join(name);
+        self.git(self.root.path(), &["clone", "origin.git", name])
+            .await;
+        self.git(&path, &["config", "user.email", "o@example.com"])
+            .await;
+        self.git(&path, &["config", "user.name", "Other"]).await;
+        path
+    }
+
+    /// Write a file in `dir` and commit it.
+    pub async fn commit_in(&self, dir: &Path, name: &str, body: &str) {
+        self.write_in(dir, name, body);
+        self.git(dir, &["add", name]).await;
+        self.git(dir, &["commit", "-m", &format!("{name}: {body}")])
+            .await;
     }
 
     /// Register `dir` in a fresh registry. `RepoPath` を作れるのは store だけなので、

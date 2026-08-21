@@ -5,16 +5,19 @@ import { Sidebar } from "./Sidebar";
 
 /*
  * ボタンの並びと有効条件 (docs/specs/ui.md の「サイドバー」)。
- * フェーズ 1 で動くのは展開・折りたたみと、リポジトリの追加・削除だけ。
+ * ツリー表示のトグルとコンソールはフェーズ 3。
  */
 
 function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     selectedKind: null,
     pullEnabled: false,
+    fetchEnabled: true,
     groupDirectories: true,
     localOnly: false,
     consoleOpen: false,
+    onFetch: vi.fn(),
+    onPull: vi.fn(),
     onExpandLocal: vi.fn(),
     onExpandAll: vi.fn(),
     onCollapseAll: vi.fn(),
