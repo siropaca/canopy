@@ -142,6 +142,25 @@ def check_tables():
                 header = None
 
 
+def check_public_surface():
+    """表に出す文書に特定製品の名前が入っていないかを見る。
+
+    設計の根拠として docs/ に書くのは構わないが、README とリポジトリの説明には出さない。
+    """
+    surface = ["README.md"]
+    words = ["IntelliJ", "IDEA"]
+    for name in surface:
+        path = os.path.join(ROOT, name)
+        if not os.path.exists(path):
+            continue
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
+            for w in words:
+                if w in line:
+                    problems.append(
+                        f"表に製品名  {name}:{i} 「{w}」 — README には書かない"
+                    )
+
+
 def check_banned():
     for phrase, why in BANNED:
         allowed = BANNED_EXCEPT.get(phrase, [])
@@ -158,6 +177,7 @@ def main():
     check_adr_index()
     check_superseded_refs()
     check_tables()
+    check_public_surface()
     check_banned()
     if problems:
         print(f"問題 {len(problems)} 件\n")
