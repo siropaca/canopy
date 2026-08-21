@@ -54,6 +54,7 @@ pnpm tauri build # ビルド
 
 | ドキュメント | 内容 |
 | --- | --- |
+| [AGENTS.md](AGENTS.md) | 実装するときの約束。テスト駆動、レビュー、ADR の運用 |
 | [docs/motivation.md](docs/motivation.md) | 何を解決するために作っているか |
 | [docs/architecture.md](docs/architecture.md) | プロセス構成、レイヤ、データフロー、並行性 |
 | [docs/specs/](docs/specs/) | UI・git 操作・データモデルの仕様 |
@@ -67,11 +68,6 @@ pnpm tauri build # ビルド
 - **書き込みはリポジトリごとに直列化** — `index.lock` の競合を避ける ([ADR-0009](docs/adr/0009-concurrency-and-refresh.md))
 - **楽観的更新をしない** — 操作のあとは git から取り直す。画面と実態がずれる方が困る
 
-## 開発に参加する
+## ライセンス
 
-作者が自分の作業環境で使うために作っているツールなので、機能の取捨選択は作者の使い方に寄ります。  
-そのうえで、バグ報告と提案は歓迎します。
-
-コードを書く前に [AGENTS.md](AGENTS.md) を読んでください。  
-テスト駆動、フェーズごとのレビュー、設計判断は ADR に残すといった約束が書いてあります。  
-AI コーディングエージェントで実装を進める前提の構成になっています。
+[MIT](LICENSE)
