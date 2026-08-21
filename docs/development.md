@@ -41,13 +41,17 @@ pnpm は Node の bin にも入っていて PATH で勝つことがあるため�
 | 4 | `check:format` | Prettier の `--check` |
 | 5 | `test` | Vitest |
 | 6 | `build` | `vite build`。**本番ビルドが通るか** |
-| 7 | `check:rust` | `cargo fmt --check` → `cargo clippy --locked -- -D warnings` → `cargo test --locked` |
+| 7 | `check:rust` | `cargo fmt --check` → `cargo check --locked` → `cargo clippy --locked --all-targets -- -D warnings` → `cargo test --locked` |
 | 8 | `check:docs` | `python3 scripts/check-docs.py` |
 
 `build` を入れているのは、CSS の壊れや `index.html` の参照ミスを他の 7 段が誰も読まないため。  
 存在しないファイルの `@import` を足しても、typecheck も lint も Vitest も緑になる。
 
 `--locked` を付けているのは、`Cargo.lock` のコミット漏れを黙って解決させないため。
+
+`cargo check` を clippy より前に置いているのは、**dev-dependencies を含めない**ビルドを  
+1 回通すため。`cargo test` と `clippy --all-targets` は dev-dependencies も解決するので、  
+feature が合成されて本体のビルドだけが落ちる状態を見逃す ([pitfalls.md](pitfalls.md))。
 
 型の検査が後ろにあると、tsc が古い生成物を見て通ってしまう。  
 検査は緑なのにフロントが壊れている状態が作れるので、必ずこの順にする。
@@ -118,6 +122,11 @@ cargo は `--manifest-path` の位置ではなく**実行したディレクト�
 
 `[env]` に `force` を付けない。  
 `scripts/check-generated.sh` と `check:rust` が環境変数で出力先を差し替えているので、設定側を勝たせると検査が自分自身と比べることになる。
+
+同じファイルで `TS_RS_LARGE_INT = "number"` も指定している。  
+ts-rs は既定で `i64` / `u64` を `bigint` にするが、**IPC は JSON なので実行時は number で届く。**  
+`bigint` と宣言すると型だけが嘘になり、`new Date(committed_at)` が実行時に落ちる。  
+この指定が消えると `check:generated` が差分を見つけて落ちる。
 
 `cargo test` は `export_bindings_*` という普通のテストとして生成を実行する。  
 そのため `check:rust` は `TS_RS_EXPORT_DIR` を `target/` の下に向けて回す。  

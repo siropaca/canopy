@@ -16,6 +16,7 @@
 - **コマンドの引数と戻り値のラッパは手書きにする。** `ts-rs` は struct しか生成しないので、`invoke` の引数名はどうしても手書きになる。そこは統合テストで縛る
 - `Option<T>` は `T | null` として出る。`T | undefined` ではない
 - 時刻は `i64` の Unix ミリ秒 (UTC)。相対時刻の文字列はフロントで組み立てる
+- **`i64` / `u64` は `number` で出す。** `.cargo/config.toml` の `TS_RS_LARGE_INT`。ts-rs の既定は `bigint` だが、IPC は JSON なので実行時は number で届く。`bigint` と宣言すると型だけが嘘になる
 - フィールド名は Rust の snake_case のまま出す。`serde` も `ts` も `rename_all` を使わない。lint の命名規則から DTO を除外する
 
 ## 理由

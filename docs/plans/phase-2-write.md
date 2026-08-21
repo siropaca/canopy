@@ -51,6 +51,29 @@
 - [ ] `gone` が付いたブランチのプルを無効にする
 - [ ] 強制プッシュのチェックボックスは ahead が 0 のとき無効にする。behind だけのブランチに撃つとリモートを巻き戻す
 
+
+## フェーズ 1 のレビューから持ち越した設計課題
+
+書き込みのコマンドを足すときに、先にこれを片付ける。
+
+- [ ] **並行制御の合成を 1 箇所に出す。** いまは `get_repo_snapshot` が
+      「locate → 読み取りの permit → revision の採番 → build_snapshot」の順序を直接持っている。
+      書き込みが 6〜7 本乗ると「locate → 書き込みロック → 参照名の検証 → git → **同じロックの中で**
+      取り直し → `{result, snapshot}`」が各コマンドに複製される。
+      `&AppState` を受ける関数に落とせば、順序を守っていることをユニットテストで固定できる
+      (`AppState::load(path)` は Tauri 無しで作れる)
+- [ ] **`commands/repo.rs` を分ける。** いまは設定の CRUD・追加フロー・スナップショット読みの 3 役。
+      操作系を足す前に `commands/settings.rs` / `commands/snapshot.rs` / `commands/ops.rs` へ分けると、
+      `generate_handler!` のパス書き換えが 1 回で済む
+- [ ] **行の述語を `shared/lib/selection.ts` に集める。** `⧉` 付きはチェックアウト無効、
+      `gone` はプル無効、ahead 0 なら強制プッシュ無効、実行中はそのリポジトリの操作系すべて無効。
+      サイドバー・コンテキストメニュー・詳細ペインの 3 features が同じ入力から判断するので、
+      features には置かない (フェーズ 1 で `canPullSelection` / `isFoldable` を置いた場所)
+- [ ] **「画面に見えている選択」を `store/useSelectedRow.ts` に出す。** いまは `app/App.tsx` が
+      `rows.find` で解いて props で配っている。コンテキストメニューとダイアログが同じものを要る
+- [ ] **`RepoState` に「実行中」が増えたときの参照経路を 1 本にする。** 正はストア側
+      (`src/ipc/types.ts` の `RepoRow` に注記済み)
+
 ## テスト
 
 | 層 | 内容 |

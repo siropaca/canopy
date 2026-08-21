@@ -46,11 +46,12 @@ canopy/
 │   │   ├── ui/                 features をまたいで使う部品 (スクロールバー、仮想リスト、スプリッタ)
 │   │   ├── hooks/
 │   │   ├── lib/                純粋関数 (ツリー構築、フィルタ、集計)
-│   │   └── styles/             トークン (CSS 変数) とリセット
+│   │   └── styles/             トークン (CSS 変数)、リセット、仮想化に渡す行高
 │   ├── ipc/
 │   │   ├── generated/          ts-rs が出力する DTO の型。手で触らない
 │   │   └── (直下)              invoke のラッパ、イベント購読、フロント専用の手書き型
-│   └── store/                  Zustand のストア
+│   ├── store/                  Zustand のストア、起動時の読み込み、永続化
+│   └── test/                   テストの足場 (jsdom の後始末、フィクスチャ、横断的な検査)
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs             エントリ。lib の run() を呼ぶだけ
@@ -58,8 +59,9 @@ canopy/
 │   │   ├── commands/           #[tauri::command] の定義
 │   │   ├── git/                コマンド組み立て、実行、パース
 │   │   ├── model/              serde の DTO
-│   │   ├── store/              設定の読み書き
-│   │   └── queue/              リポジトリごとの直列実行キュー
+│   │   ├── store/              設定の読み書き、id → パスの解決
+│   │   ├── queue/              同時実行の上限と世代の採番 (フェーズ 2 で直列キュー)
+│   │   └── state.rs            コマンドが共有する状態 (設定・キュー)
 │   ├── capabilities/           Tauri の権限 (docs/security.md)
 │   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
 │   ├── tauri.conf.json         ウィンドウ、CSP、バンドルの設定
@@ -87,6 +89,11 @@ app > features > store > ipc > shared
 **この順序は `eslint.config.js` の `no-restricted-imports` で機械的に縛っている。**  
 人の目で守る前提にしない。
 
+例外がもう 1 つある。  
+`shared` は `ipc/types.ts` から**型だけ**取ってよい (`import type`)。  
+`flatten()` のような純粋関数は `shared/lib/` に置くのに `RepoState` を受け取るので、型が下の層から見えないと成立しない。  
+実行時の import (invoke のラッパ) は変わらず禁止で、`allowTypeImports` で型に限って許している。
+
 `features/` の中は「その画面でしか使わないもの」だけ置く。  
 2 つ目の features から参照したくなった時点で `shared/` に上げる。
 
@@ -99,6 +106,11 @@ app > features > store > ipc > shared
 
 Rust から来ない型 (`RepoState`、`RowNode` など) は `src/ipc/types.ts` に手で書く。  
 `ipc/generated/` は生成物専用で、lint と整形と生成物の検査から外してあるため、手書きを混ぜられない。
+
+ストアへ書き込む入り口は `store/` に集める。  
+起動時の読み込みは `store/bootstrap.ts`、ツリーの展開は `store/treeActions.ts`。  
+**フェーズ 2 のイベント購読も同じ形にする。** `ipc/events.ts` に `listen` の薄いラッパを置き、  
+購読を張るのは `store/` 側。features の `useEffect` で購読すると、`revision` の比較を通す場所が 2 箇所に分かれる。
 
 ## データフロー
 
@@ -150,8 +162,12 @@ git の実態と画面がずれる方が、少し待つより困る。
 行の平坦化がその前提。折りたたみとグループ化はここで解決する。
 
 ```
-flatten(repos, { expanded, query, groupDirectories, localOnly }) -> RowNode[]
+flatten(repos: readonly RepoState[], { expanded, query, groupDirectories, localOnly }) -> RowNode[]
 ```
+
+平坦化を呼ぶのは `store/useTreeRows.ts` の 1 箇所。  
+ツリーと詳細ペインが**同じ配列**を見る必要がある (詳細ペインは「画面に見えている選択」でしか内容を出さない)。  
+`features` 同士は直接参照しないので、両方が読める `store` に置いて `app` から渡す。
 
 **この形をフェーズ 1 で確定させる。**  
 検索・グループ化・ローカルのみ表示はフェーズ 3 の機能だが、後から引数を足すと呼び出し側を全部直すことになる。  

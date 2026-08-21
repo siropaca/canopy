@@ -11,8 +11,10 @@
 - 環境変数 `LC_ALL=C` / `GIT_TERMINAL_PROMPT=0` / `GIT_OPTIONAL_LOCKS=0`
 - `GIT_SSH_COMMAND="ssh -o ConnectTimeout=5 -o BatchMode=yes"`。これが無いと接続不能時に 1 本あたり 75 秒ブロックする
 - `PATH` は明示的に組み立てる。`.app` を Finder から起動すると launchd の最小 PATH になり、ターミナルから `pnpm tauri dev` したときと環境が違う。**動作確認はビルドした `.app` を Finder から起動して行う**
-- `--no-color`
+- 色を止める。`-c color.ui=false` を付ける (`--no-color` はサブコマンドごとのオプションなので共通では使えない)
 - 引数は配列で渡す。シェルを経由しない
+- **標準入力を閉じる** (`Stdio::null`)。認証やエディタの待ちで固まらせない
+- **`GIT_DIR` と `GIT_WORK_TREE` を消す。** 呼び出し元のシェルに残っていると別のリポジトリを触る
 - 参照を渡すコマンドには `--end-of-options` を挟む
 - 出力形式を固定する。`--porcelain` / `for-each-ref --format` / `log --format`
 - `-c core.quotepath=false` を付ける。日本語のパスがエスケープされるのを防ぐ
@@ -21,6 +23,9 @@
 - すべての参照引数を共通の検証関数に通す
 
 ## 読み取り
+
+フロントから呼ぶのは `get_repo_snapshot(repo_id)` の 1 本だけ。  
+下の表はその中で実行するコマンド。**リポジトリ 1 件分をまとめて 1 回の invoke で返す。**
 
 | 目的 | コマンド |
 | --- | --- |
@@ -33,7 +38,10 @@
 | 直近のコミット | `git log -5 --format=<hash/subject> <ブランチ>` |
 | origin の URL | `git remote get-url origin` |
 | リモートの一覧 | `git remote` |
+| detached のときの参照名 | `git describe --tags --exact-match HEAD` → 失敗したら `git rev-parse --short HEAD` |
 | 実体の .git ディレクトリ | `git rev-parse --git-common-dir` |
+| ワークツリーの最上位 | `git rev-parse --show-toplevel` |
+| 最後の fetch の時刻 | git を使わない。`<--git-common-dir>/FETCH_HEAD` の mtime を読む |
 
 `git remote` を取るのは、リモートが origin だけとは限らないため。  
 fork を持つリポジトリでは `upstream/main` のような参照が `refs/remotes` に並ぶ。  
@@ -44,8 +52,15 @@ fork を持つリポジトリでは `upstream/main` のような参照が `refs/
 読み取りはリポジトリを跨いで並列に投げてよい。  
 ただし**同一リポジトリの書き込み中は待たせる** ([../adr/0009-concurrency-and-refresh.md](../adr/0009-concurrency-and-refresh.md))。
 
-`worktree list --porcelain` の `prunable` と `locked` は除外する。  
-消えたワークツリーで `git status` を実行すると失敗する。
+`worktree list --porcelain` から落とすのは `prunable` / `locked` / `bare` / detached の 4 つ。  
+消えたワークツリーで `git status` を実行すると失敗する。  
+detached はどのブランチにも紐づけられないので載せない ([data-model.md](data-model.md) の `Worktree`)。
+
+**日時は `creatordate` で取る。** annotated タグは `committerdate` が空になる (実測)。  
+`refs/heads` は最終コミットの日時が欲しいので `committerdate` のままでよい。
+
+パスを含む出力は `-z` を付ける。`worktree list --porcelain -z` は  
+区画を NUL で区切り、レコードの終わりを空の区画で表す (実測)。
 
 `for-each-ref refs/remotes` の結果からは `/` を含まない参照と `HEAD` で終わる参照を除く。  
 `refs/remotes/origin/HEAD` が `origin` として混ざる。
@@ -80,13 +95,16 @@ fork を持つリポジトリでは `upstream/main` のような参照が `refs/
 
 | 操作 | IPC | 実装 |
 | --- | --- | --- |
+| リポジトリの一覧 | `list_repos` | store から id・名前・パスを返す。git は実行しない |
+| UI 状態の読み込み | `get_ui_state` | store から返す |
+| リポジトリの状態 | `get_repo_snapshot` | 上の「読み取り」の表を実行して `RepoSnapshot` を組み立てる |
 | リポジトリを追加 | `add_repo` | Rust 側でフォルダ選択ダイアログを開く。パスがフロントを経由しない |
 | リストから削除 | `remove_repo` | store から消すだけ。ディスクには触らない |
-| 並び順の変更 | `set_repo_order` | id の配列を受け取る |
+| 並び順の変更 | `save_ui_state` | 専用のコマンドは持たない。`UiState.repo_order` に載せて保存する |
 | Finder で表示 | `reveal_in_finder` | `open -R <パス>` |
 | ターミナルで開く | `open_in_terminal` | `open -a <アプリ> <パス>`。アプリ名は設定に持つ |
 | プッシュ前のコミット一覧 | `get_push_preview` | `git log` で ahead 件数分を取る。スナップショットには載せない |
-| UI 状態の保存 | `save_ui_state` | まとめて保存する (デバウンス) |
+| UI 状態の保存 | `save_ui_state` | まとめて保存する (デバウンス)。**並び順もこれ 1 本で保存する** |
 
 コピー系はフロントで `navigator.clipboard.writeText` を使う。IPC を通さない。  
 失敗したらトーストで知らせる。黙って落とさない。

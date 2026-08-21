@@ -5,9 +5,34 @@
 <title>Canopy</title>
 <style>
 :root{
+  /* 面と境界 */
   --bg:#1e1f22; --panel:#2b2d30; --head:#3b3e43; --border:#393b40; --border2:#4a4d51;
-  --fg:#dfe1e5; --dim:#6f737a; --hover:#2f3134; --sel:#3c3f41; --selfoc:#2e436e;
-  --track:#548af7; --ahead:#62a85e; --wt:#b28fd0; --cur:#e8b73d; --dirty:#e8a33d; --gone:#9a5f5f; --folder:#9aa0a6;
+  --head-line:#222426; --overlay-line:#35383d; --on:#43464b; --on-border:#55585e;
+
+  /* 文字 */
+  --fg:#dfe1e5; --dim:#6f737a; --faint:#54585e; --disabled:#4a4d51;
+  --fg-strong:#fff; --fg-mid:#b4b8be; --nohit:#787c82;
+
+  /* 選択とホバー */
+  --hover:#2f3134; --sel:#3c3f41; --selfoc:#2e436e;
+  --head-sel:#4a4e54; --head-selfoc:#3d5a94; --head-nohit:#33363a;
+
+  /* 意味の色 */
+  --track:#548af7; --ahead:#62a85e; --wt:#b28fd0; --cur:#e8b73d; --dirty:#e8a33d;
+  --gone:#9a5f5f; --folder:#9aa0a6; --icon:#9aa0a6;
+
+  /* バッジと出力 */
+  --track-bg:#26364f; --track-fg:#7ba7f5; --ahead-bg:#2b3d2e; --ahead-fg:#8ec98e;
+  --dirty-bg:#4a3c22; --badge-bg:#4a4d51; --badge-fg:#cfd2d6;
+  --del:#c96a6a; --err:#c9534b; --err-line:#e06c6c;
+  --out:#c8ccd2; --out-dim:#7d8188; --graph:#3a4c6d; --menu-key:#cbd5ea;
+
+  /* ボタン */
+  --btn:#365880; --btn-hover:#3f6294; --btn-border:#4b6eaf; --btn-face:#3a3d42;
+  --accent:#4b83f0; --accent-hover:#5a8ef4;
+  --danger:#a4453f; --danger-hover:#b8504a; --danger-face:#5a3535; --danger-fg:#f0d4d4;
+
+  /* 寸法 */
   --row:21px;
 }
 *{box-sizing:border-box}
@@ -18,14 +43,14 @@ body{margin:0;background:var(--bg);color:var(--fg);overflow:hidden;
 button{background:transparent;border:1px solid transparent;color:var(--dim);
   font:inherit;padding:0 9px;height:22px;cursor:pointer;white-space:nowrap}
 button:hover{background:var(--hover);color:var(--fg)}
-button.on{background:var(--selfoc);color:#fff;border-color:#4b6eaf}
-button.pri{background:#365880;border-color:#4b6eaf;color:#fff}
-button.pri:hover{background:#3f6294}
-button.danger:hover{background:#5a3535;color:#f0d4d4}
+button.on{background:var(--selfoc);color:var(--fg-strong);border-color:var(--btn-border)}
+button.pri{background:var(--btn);border-color:var(--btn-border);color:var(--fg-strong)}
+button.pri:hover{background:var(--btn-hover)}
+button.danger:hover{background:var(--danger-face);color:var(--danger-fg)}
 
 .qbar{position:sticky;top:0;z-index:5;background:var(--bg);
   border-bottom:1px solid var(--border);padding:6px}
-.qbar input{width:100%;background:#1e1f22;border:1px solid var(--border2);color:var(--fg);
+.qbar input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--fg);
   height:27px;padding:0 7px 0 25px;font:inherit;font-size:13px;outline:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236f737a' stroke-width='1.2'><circle cx='5' cy='5' r='3.2'/><path d='M7.5 7.5 10.5 10.5'/></svg>");
   background-repeat:no-repeat;background-position:6px 50%;background-size:14px}
@@ -39,9 +64,9 @@ svg{width:13px;height:13px;flex:0 0 13px;fill:none;stroke:currentColor;
 svg.chev{color:var(--dim)}
 svg.chev.cl{transform:rotate(-90deg)}
 .ph{width:13px;height:13px;flex:0 0 13px;display:inline-block}
-svg.fo{color:var(--folder)} svg.br{color:#9aa0a6}
+svg.fo{color:var(--folder)} svg.br{color:var(--icon)}
 svg.cu{color:var(--cur);stroke-width:1.2}
-svg.tg{color:#9aa0a6}
+svg.tg{color:var(--icon)}
 svg.wti{color:var(--wt);width:11px;height:11px;flex:0 0 11px}
 svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 
@@ -50,50 +75,50 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 
 /* ---- コンソール ---- */
 .console{flex:0 0 230px;display:flex;flex-direction:column;min-height:0;
-  background:#1e1f22;border-top:1px solid var(--border2)}
+  background:var(--bg);border-top:1px solid var(--border2)}
 .console[hidden]{display:none}
 .console .ctabs{display:flex;align-items:center;gap:1px;height:26px;padding:0 4px;
   background:var(--panel);border-bottom:1px solid var(--border);overflow-x:auto}
 .console .ctab{display:flex;align-items:center;gap:7px;height:22px;padding:0 8px;
   color:var(--dim);white-space:nowrap;cursor:default;max-width:260px}
 .console .ctab:hover{background:var(--hover)}
-.console .ctab.on{background:#43464b;color:#fff}
+.console .ctab.on{background:var(--on);color:var(--fg-strong)}
 .console .ctab .nm2{overflow:hidden;text-overflow:ellipsis}
-.console .ctab .x{color:#6f737a;flex:0 0 auto}
-.console .ctab .x:hover{color:#fff}
-.console .ctab .dot{width:6px;height:6px;border-radius:50%;background:#c9534b;flex:0 0 6px}
+.console .ctab .x{color:var(--dim);flex:0 0 auto}
+.console .ctab .x:hover{color:var(--fg-strong)}
+.console .ctab .dot{width:6px;height:6px;border-radius:50%;background:var(--err);flex:0 0 6px}
 .console .sp2{flex:1}
-.console .ro{color:#54585e;font-size:11px;padding:0 6px}
+.console .ro{color:var(--faint);font-size:11px;padding:0 6px}
 .console .ctitle{color:var(--dim);padding:0 8px}
 .console .close{display:flex;align-items:center;justify-content:center;width:20px;height:20px;
   color:var(--dim);flex:0 0 20px}
-.console .close:hover{background:var(--hover);color:#fff}
+.console .close:hover{background:var(--hover);color:var(--fg-strong)}
 .console .close svg{width:12px;height:12px;flex:0 0 12px}
 .console .out{flex:1;overflow:auto;padding:6px 10px;user-select:text;
   font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:19px;
   white-space:pre-wrap;word-break:break-word}
-.console .out .cmd{color:#c8ccd2}
-.console .out .err{color:#e06c6c}
-.console .out .dim2{color:#7d8188}
-.console .empty2{color:#4a4d51;padding:8px 10px}
+.console .out .cmd{color:var(--out)}
+.console .out .err{color:var(--err-line)}
+.console .out .dim2{color:var(--out-dim)}
+.console .empty2{color:var(--disabled);padding:8px 10px}
 .strip{flex:0 0 36px;background:var(--panel);border-right:1px solid var(--border);
   display:flex;flex-direction:column;align-items:center;padding:5px 0;gap:2px}
 .strip .grow{flex:1}
 .strip .sb{width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;
-  color:#9aa0a6}
-.strip .sb:hover{background:var(--hover);color:#fff}
-.strip .sb.on{background:#43464b;color:#fff;border:1px solid #55585e}
-.strip .sb.off{color:#4a4d51}
-.strip .sb.off:hover{background:transparent;color:#4a4d51}
+  color:var(--icon)}
+.strip .sb:hover{background:var(--hover);color:var(--fg-strong)}
+.strip .sb.on{background:var(--on);color:var(--fg-strong);border:1px solid var(--on-border)}
+.strip .sb.off{color:var(--disabled)}
+.strip .sb.off:hover{background:transparent;color:var(--disabled)}
 .strip .sb svg{width:18px;height:18px;flex:0 0 18px}
 .strip .div{width:20px;height:1px;background:var(--border2);margin:4px 0}
-.tip{position:fixed;z-index:70;background:#3b3e43;border:1px solid var(--border2);
+.tip{position:fixed;z-index:70;background:var(--head);border:1px solid var(--border2);
   padding:2px 7px;font-size:12px;color:var(--fg);box-shadow:0 3px 10px rgba(0,0,0,.4);
   pointer-events:none;white-space:nowrap}
 .treepane{flex:0 0 360px;overflow:auto;outline:none}
 .splitter{flex:0 0 5px;cursor:col-resize;border-right:1px solid var(--border);
   background:transparent}
-.splitter:hover,.splitter.drag{background:#3d5a94;border-right-color:#3d5a94}
+.splitter:hover,.splitter.drag{background:var(--head-selfoc);border-right-color:var(--head-selfoc)}
 .r{display:flex;align-items:center;gap:4px;height:var(--row);
   padding-left:calc(5px + var(--d,0) * 13px);padding-right:7px;cursor:default}
 .r:hover{background:var(--hover)}
@@ -101,11 +126,11 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .treepane:focus .r.sel{background:var(--selfoc)}
 .r .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .r .sp{flex:1}
-.r.repo{background:var(--head);color:#fff;font-weight:600;
-  border-top:1px solid var(--border2);border-bottom:1px solid #222426}
-.r.repo.sel{background:#4a4e54}
-.treepane:focus .r.repo.sel{background:#3d5a94}
-.r.repo.nohit{color:#787c82;background:#33363a}
+.r.repo{background:var(--head);color:var(--fg-strong);font-weight:600;
+  border-top:1px solid var(--border2);border-bottom:1px solid var(--head-line)}
+.r.repo.sel{background:var(--head-sel)}
+.treepane:focus .r.repo.sel{background:var(--head-selfoc)}
+.r.repo.nohit{color:var(--nohit);background:var(--head-nohit)}
 .r.repo.nohit .nm{font-weight:400}
 .r.repo.dragging{opacity:.45}
 .r.repo.dropbefore{box-shadow:inset 0 2px 0 var(--track)}
@@ -115,20 +140,20 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
   font-variant-numeric:tabular-nums}
 .tkw.dn{color:var(--track)}
 .tkw.up{color:var(--ahead)}
-.cnt{color:#54585e;font-size:12px}
+.cnt{color:var(--faint);font-size:12px}
 .gone{color:var(--gone)}
 .dirtyw{display:inline-flex;align-items:center;gap:3px;margin-left:7px;color:var(--dirty);
   line-height:1;font-variant-numeric:tabular-nums}
 .wtm{display:inline-flex;align-items:center;gap:3px;margin-left:7px;color:var(--wt);
   line-height:1}
 .wtm .wn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
-.badge{font-size:11px;padding:0 4px;background:#4a4d51;color:#cfd2d6;
+.badge{font-size:11px;padding:0 4px;background:var(--badge-bg);color:var(--badge-fg);
   display:inline-flex;align-items:center;gap:2px;line-height:1;height:16px;
   font-variant-numeric:tabular-nums}
 .badge svg{width:10px;height:10px;flex:0 0 10px;stroke-width:1.5}
-.badge.d{background:#4a3c22;color:var(--dirty)}
-.badge.b{background:#26364f;color:#7ba7f5}
-.badge.a{background:#2b3d2e;color:#8ec98e}
+.badge.d{background:var(--dirty-bg);color:var(--dirty)}
+.badge.b{background:var(--track-bg);color:var(--track-fg)}
+.badge.a{background:var(--ahead-bg);color:var(--ahead-fg)}
 
 .detail{flex:1;overflow:auto;padding:9px 11px}
 .detail h1{font-size:15px;margin:0 0 2px;font-weight:600;display:flex;align-items:center;gap:5px}
@@ -140,27 +165,27 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .files .f{display:flex;align-items:center;gap:8px;height:var(--row)}
 .files .st{flex:0 0 20px;text-align:center;font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .files .st.M{color:var(--dirty)} .files .st.A{color:var(--ahead)}
-.files .st.D{color:#c96a6a} .files .st.R{color:var(--track)}
-.files .st.U{color:#6f737a}
+.files .st.D{color:var(--del)} .files .st.R{color:var(--track)}
+.files .st.U{color:var(--dim)}
 .files .fp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.files .more{color:#4a4d51}
-.acts button[disabled]{color:#4a4d51;cursor:default}
-.acts button[disabled]:hover{background:transparent;color:#4a4d51}
-.empty{height:100%;display:flex;align-items:center;justify-content:center;color:#4a4d51}
+.files .more{color:var(--disabled)}
+.acts button[disabled]{color:var(--disabled);cursor:default}
+.acts button[disabled]:hover{background:transparent;color:var(--disabled)}
+.empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--disabled)}
 
-.menu{position:fixed;z-index:50;background:#2b2d30;border:1px solid var(--border2);
+.menu{position:fixed;z-index:50;background:var(--panel);border:1px solid var(--border2);
   box-shadow:0 6px 20px rgba(0,0,0,.5);padding:4px 0;min-width:230px;max-width:560px}
 .menu .mi{height:24px;line-height:24px;padding:0 11px;white-space:nowrap;cursor:default;
   display:flex;align-items:center;gap:10px}
-.menu .mi:hover{background:var(--selfoc);color:#fff}
+.menu .mi:hover{background:var(--selfoc);color:var(--fg-strong)}
 .menu .mi .k{color:var(--dim);font-size:12px}
 .menu .mi .k.far{margin-left:auto}
-.menu .mi:hover .k{color:#cbd5ea}
+.menu .mi:hover .k{color:var(--menu-key)}
 .menu .mi .v{margin-left:auto;color:var(--dim);font-size:12px;max-width:320px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
-.menu .mi:hover .v{color:#cbd5ea}
+.menu .mi:hover .v{color:var(--menu-key)}
 .menu .mi .ar2{margin-left:auto;color:var(--dim)}
-.menu .mi.off{color:#54585e}
+.menu .mi.off{color:var(--faint)}
 .menu .mi.off:hover{background:transparent}
 .menu .hr{height:1px;background:var(--border);margin:4px 0}
 .menu .ttl{height:22px;line-height:22px;padding:0 11px;color:var(--dim);font-size:12px}
@@ -168,18 +193,18 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .modal{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.4);
   display:flex;align-items:flex-start;justify-content:center;padding-top:22vh}
 .modal[hidden]{display:none}
-.modal .box{background:#2b2d30;border:1px solid #4a4d51;border-radius:8px;
+.modal .box{background:var(--panel);border:1px solid var(--border2);border-radius:8px;
   box-shadow:0 16px 44px rgba(0,0,0,.6);padding:0 0 14px;width:440px;overflow:hidden}
 .modal .box.wide{width:620px}
 .modal .tbar{display:flex;align-items:center;height:38px;padding:0 20px;
-  border-bottom:1px solid #35383d}
+  border-bottom:1px solid var(--overlay-line)}
 .modal .tbar .t{font-weight:600}
 .modal .body{padding:14px 20px 0}
 .modal .frow{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px}
 .modal .frow label{color:var(--fg);text-align:right;white-space:nowrap}
-.modal input[type=text]{width:100%;height:30px;padding:0 8px;background:#1e1f22;
+.modal input[type=text]{width:100%;height:30px;padding:0 8px;background:var(--bg);
   border:1px solid var(--border2);border-radius:4px;color:var(--fg);font:inherit;outline:none}
-.modal input[type=text]:focus{border-color:#4b83f0;box-shadow:0 0 0 1px #4b83f0}
+.modal input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .modal .prow{display:flex;align-items:center;gap:7px;min-width:0}
 .modal .prow b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   max-width:42%;flex:0 1 auto}
@@ -191,34 +216,34 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .modal .clist .c .dot{flex:0 0 7px;width:7px;height:7px;border-radius:50%;
   background:var(--track);margin-left:2px}
 .modal .clist .c:not(:last-child)::before{content:"";position:absolute;left:5.5px;top:15px;
-  width:1px;height:15px;background:#3a4c6d}
+  width:1px;height:15px;background:var(--graph)}
 .modal .clist .c .h{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:12px;
   flex:0 0 auto}
 .modal .clist .c .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.modal .clist .none{color:#4a4d51}
+.modal .clist .none{color:var(--disabled)}
 .modal .cbrow{display:flex;align-items:center;gap:8px;margin-top:14px}
-.modal .cbrow input{width:15px;height:15px;accent-color:#4b83f0;margin:0}
+.modal .cbrow input{width:15px;height:15px;accent-color:var(--accent);margin:0}
 .modal .cbrow .note{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .modal .btns button.warn,.modal .btns button.pri.warn{
-  background:#a4453f;border-color:#a4453f;color:#fff}
-.modal .btns button.warn:hover,.modal .btns button.pri.warn:hover{background:#b8504a}
+  background:var(--danger);border-color:var(--danger);color:var(--fg-strong)}
+.modal .btns button.warn:hover,.modal .btns button.pri.warn:hover{background:var(--danger-hover)}
 .modal .btns{display:flex;justify-content:flex-end;gap:8px;margin:16px 20px 0}
 .modal .btns button{height:30px;padding:0 16px;border-radius:5px;
   border:1px solid var(--border2);color:var(--fg)}
-.modal .btns button:hover{background:#3a3d42}
-.modal .btns button.pri{background:#4b83f0;border-color:#4b83f0;color:#fff}
-.modal .btns button.pri:hover{background:#5a8ef4}
+.modal .btns button:hover{background:var(--btn-face)}
+.modal .btns button.pri{background:var(--accent);border-color:var(--accent);color:var(--fg-strong)}
+.modal .btns button.pri:hover{background:var(--accent-hover)}
 .toast{position:fixed;right:12px;bottom:30px;z-index:60;display:flex;flex-direction:column;
   gap:8px;align-items:flex-end}
-.toast .tst{display:flex;align-items:center;gap:11px;background:#3c3f41;border-radius:8px;
+.toast .tst{display:flex;align-items:center;gap:11px;background:var(--sel);border-radius:8px;
   padding:11px 16px;min-width:300px;max-width:560px;
   box-shadow:0 10px 28px rgba(0,0,0,.5)}
-.toast .tst .ico{flex:0 0 18px;width:18px;height:18px;border-radius:50%;background:#4b83f0;
-  color:#fff;font-size:12px;font-weight:700;line-height:18px;text-align:center}
-.toast .tst .msg{color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.toast .tst .cwd{color:#b4b8be}
-.toast .tst.err .ico{background:#c9534b}
-.toast .tst .lnk{color:#7ba7f5;margin-left:4px;cursor:default;white-space:nowrap}
+.toast .tst .ico{flex:0 0 18px;width:18px;height:18px;border-radius:50%;background:var(--accent);
+  color:var(--fg-strong);font-size:12px;font-weight:700;line-height:18px;text-align:center}
+.toast .tst .msg{color:var(--fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast .tst .cwd{color:var(--fg-mid)}
+.toast .tst.err .ico{background:var(--err)}
+.toast .tst .lnk{color:var(--track-fg);margin-left:4px;cursor:default;white-space:nowrap}
 .toast .tst .lnk:hover{text-decoration:underline}
 .toast .tst code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
 </style>
@@ -489,22 +514,24 @@ function renderDetail(){
     <div class="sub">${esc(r.n)}${isLocal&&b.cur?" — 現在のブランチ":""}</div>
     <dl class="kv">
       <dt>種別</dt><dd>${isLocal?"ローカル":isTag?"タグ":"リモート"}</dd>
-      <dt>追跡</dt><dd>${isLocal?(b.gone?`<span class="gone">origin/${esc(b.name)} (削除済み)</span>`:"origin/"+esc(b.name)):"—"}</dd>
-      <dt>差分</dt><dd>${TK(b)||'<span class="dim">最新</span>'}</dd>
+      ${isLocal?`<dt>追跡</dt><dd>${b.gone?`<span class="gone">origin/${esc(b.name)} (削除済み)</span>`:"origin/"+esc(b.name)}</dd>
+      <dt>差分</dt><dd>${TK(b)||'<span class="dim">最新</span>'}</dd>`:""}
       <dt>最終コミット</dt><dd>${esc(b.date||"")}</dd>
-      ${w?`<dt>ワークツリー</dt><dd>${esc(w.p.split("/").pop())} <span class="dim">${esc(short(w.p))}</span></dd>`:""}
-      <dt>未コミット</dt><dd>${dn?`<span style="color:var(--dirty)">${dn} ファイル</span>`:'<span class="dim">なし</span>'}</dd>
+      ${isLocal&&w?`<dt>ワークツリー</dt><dd>${esc(w.p.split("/").pop())} <span class="dim">${esc(short(w.p))}</span></dd>`:""}
+      ${isLocal?`<dt>未コミット</dt><dd>${dn?`<span style="color:var(--dirty)">${dn} ファイル</span>`:'<span class="dim">なし</span>'}</dd>`:""}
     </dl>
     <div class="acts">
       ${isTag
         ? `<button class="pri" data-a="checkout-tag">チェックアウト</button>`
-        : isLocal&&b.cur
+        : !isLocal
+        ? `<button class="pri" data-a="checkout">チェックアウト</button>`
+        : b.cur
         ? `<button class="pri" data-a="pull">プル</button>
            <button data-a="push-branch">プッシュ</button>`
         : `<button class="pri" data-a="checkout">チェックアウト</button>
            <button data-a="checkout-update">チェックアウトとプル</button>
            <button data-a="push-branch">プッシュ</button>`}
-      <button data-a="copy-branch">名前をコピー</button>
+      <button data-a="copy-branch">${isTag?"タグ名をコピー":"名前をコピー"}</button>
     </div>
     ${fileList(own,20)}`;
 }

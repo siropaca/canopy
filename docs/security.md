@@ -9,7 +9,8 @@ git を子プロセスで実行する以上、外から来た文字列がその�
 `run_git(args: string[])` のようなコマンドを 1 つ置くと、WebView 側の任意コードがそのまま任意コマンド実行になる。
 
 意図ごとにコマンドを分ける。  
-コマンドと git の対応は [specs/git-operations.md](specs/git-operations.md) の表にまとめてある。
+コマンドと git の対応は [specs/git-operations.md](specs/git-operations.md) の表にまとめてある。  
+読み取り系も同じ表に載せる。**フロントから呼べるコマンドは、あの表を数えれば全部になる。**
 
 守りたい不変条件は「**フロントから受け取ったパスで git を実行しない**」。
 

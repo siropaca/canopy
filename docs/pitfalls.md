@@ -5,6 +5,20 @@
 
 ## UI の実装
 
+### 仮想リストは「スクロール要素が出来るまで」1 行も描けない
+
+自前スクロールバー (overlayscrollbars) に `defer` を付けると、初期化が  
+`requestIdleCallback` 待ちになる。仮想化のスクロール要素はその中のビューポートなので、  
+初期化が済むまで行数 0 で描かれる。  
+**非アクティブなタブでは idle コールバックが来ない**ので、データは届いているのに  
+ツリーが空のまま止まる (実測)。`defer` を付けない。
+
+### 選択のたびに「選択行までスクロール」を呼ぶと先端に飛ぶ
+
+`scrollToIndex` を選択の変更で呼ぶと、クリックしただけでスクロール位置が動く。  
+仕様ではクリックは選択だけ (docs/specs/ui.md の「操作」)。  
+**行の並びが変わったときだけ**追いかける。判定は行の配列の同一性で行う。
+
 ### `[hidden]` が class の `display` に負ける
 
 `.modal { display: flex }` と `<div hidden>` を組み合わせると、要素は隠れない。  
@@ -116,6 +130,38 @@ ADR を破棄・置き換えするときは、**その ADR にしか書かれて
 
 `for-each-ref refs/remotes` は `refs/remotes/origin/HEAD` を短縮した `origin` を返す。  
 `/` を含まない参照と `HEAD` で終わる参照を除く。
+
+### `refname:short` は同名のブランチとタグがあると `heads/xxx` を返す
+
+`%(refname:short)` は「曖昧にならない範囲で最短化」なので、`refs/heads/v1.0` と  
+`refs/tags/v1.0` が両方あると `heads/v1.0` / `tags/v1.0` になる (実測)。
+
+その名前は git に渡せず (`fatal: a branch is expected`)、`worktree list` が返す  
+`refs/heads/v1.0` とも一致しないので `⧉` の紐づけも切れる。  
+`%(refname:lstrip=2)` を使う。`refs/remotes` でも `origin/main` になる。
+
+### コミットを指さない軽量タグは日時を持たない
+
+`git tag x <tree の sha>` のようなタグは `creatordate` も `committerdate` も空。  
+日時が空の行をエラーにしていると、そのタグ 1 本でリポジトリのスナップショットが  
+丸ごと落ちる (実測)。
+
+`%(objecttype)` と `%(*objecttype)` を format に足して、commit に解決しない ref は落とす。  
+タグとしてチェックアウトもできないので、載せる意味が無い。
+
+### bare リポジトリとサブディレクトリは `--git-common-dir` では弾けない
+
+`git rev-parse --git-common-dir` は bare でも成功する (`.` を返す) ので、  
+登録の入口の判定には使えない。登録できてしまうと `git status` が毎回 exit 128 で落ちる。
+
+リポジトリのサブディレクトリを選んだ場合はもっと厄介で、`worktree list` が返す  
+最上位が「別のワークツリー」として残り、**現在のブランチに `⧉` が付く** (実測)。  
+`git rev-parse --show-toplevel` を使えば、bare を弾くのと最上位への正規化を 1 回で両立できる。
+
+### URL の認証情報は最後の `@` で切る
+
+`split_once('@')` だと、パスワードに `@` が入っている URL でパスワードの断片が残る。  
+git と curl は authority の最後の `@` を区切りとして扱う。`rsplit_once('@')` にする。
 
 ### `[gone]` は追跡ブランチが消えた状態
 
@@ -236,6 +282,17 @@ src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
 許可が無い環境では `.app` の生成まで成功してから `failed to run bundle_dmg.sh` で落ちる。  
 `bundle.targets` を `["app"]` にしておけば起きない。
 
+### dev-dependencies の feature が本体のビルドを騙す
+
+`cargo test` と `cargo clippy --all-targets` は dev-dependencies を含めて解決するので、  
+同じクレートを `[dependencies]` と `[dev-dependencies]` の両方に書くと **feature が合成される。**  
+`tokio` の `macros` を dev 側だけに書いて `tokio::try_join!` を実装で使ったところ、  
+`cargo test` と clippy は通ったのに `pnpm tauri dev` のビルドだけが  
+`could not find try_join in tokio` で落ちた。
+
+`pnpm check` に `cargo check --locked` を足して、dev-dependencies の入らないビルドを  
+1 回通すようにした。実装で使う feature は `[dependencies]` に書く。
+
 ### TypeScript 7 は typescript-eslint がまだ対応していない
 
 `typescript` の `latest` は 7 系だが、typescript-eslint の peer は `<6.1.0`。  
@@ -254,7 +311,8 @@ src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
 `vite/client` の型定義は `*.module.css` を `{ readonly [key: string]: string }` として宣言している。  
 このオプションを入れると `styles.app` が `TS4111` で落ち、`styles["app"]` と書くしかなくなる。  
 アンビエント宣言なので上書きもできない。  
-クラス名を型で縛りたくなったら、CSS Modules の `.d.ts` を生成する道具を検討する。
+型で縛るのは諦めて、参照と定義を突き合わせるテストを置いた (`src/test/css-modules.test.ts`)。  
+`styles.typoo` と、使っていないクラスの両方を落とす。`.d.ts` を生成する道具は入れていない。
 
 ### `eslint-plugin-react-hooks` の flat config は入れ子になっている
 

@@ -19,7 +19,7 @@
 | [0002](0002-git-cli.md) | git はライブラリではなく CLI を呼ぶ | 採用 |
 | [0003](0003-state-and-styling.md) | 状態は Zustand、スタイルは CSS Modules + トークン | 採用 |
 | [0004](0004-virtual-scroll.md) | 一覧は仮想スクロールにする | 採用 |
-| [0005](0005-persistence.md) | 設定は JSON ファイルに保存する | 採用 |
+| [0005](0005-persistence.md) | 設定は JSON ファイルに保存する | 置き換え済み (0016) |
 | [0006](0006-serial-queue-per-repo.md) | git の書き込みはリポジトリごとに直列化する | 置き換え済み (0009) |
 | [0007](0007-v1-scope.md) | v1 のスコープ | 採用 |
 | [0008](0008-no-keyboard-shortcuts.md) | v1 はキーボード操作を持たない | 採用 |
@@ -30,5 +30,6 @@
 | [0013](0013-type-generation.md) | 型は Rust から生成する | 採用 |
 | [0014](0014-macos-only.md) | 対応プラットフォームは macOS のみ | 採用 |
 | [0015](0015-auxiliary-operations.md) | v1 に含める補助操作 (コピー / Finder / ターミナル / 復帰) | 採用 |
+| [0016](0016-store-without-plugin.md) | 設定は store プラグインを使わず自分で読み書きする | 採用 |
 
 新しい ADR を足したらこの表にも追記する。
