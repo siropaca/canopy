@@ -92,7 +92,12 @@ feature が合成されて本体のビルドだけが落ちる状態を見逃す
 GitHub Actions で `pnpm check` を実行するだけにする。  
 ランナーは macOS だけ。他のプラットフォームは対象外。  
 ローカルとまったく同じコマンドを回すのが要点。  
-CI 専用の手順を増やすと、ローカルで通ったのに CI で落ちる状態を作ってしまう。
+CI 専用の**検査**を増やすと、ローカルで通ったのに CI で落ちる状態を作ってしまう。
+
+用意 (provisioning) だけは CI 側に書く。  
+`rustup component add rustfmt clippy` を 1 段置いている。  
+mise が入れた Rust には rustfmt と clippy が付いてこないので、  
+`cargo fmt --check` が「コンポーネントが無い」で落ちる ([pitfalls.md](pitfalls.md))。
 
 ## 依存の追加
 

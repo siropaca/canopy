@@ -282,6 +282,16 @@ src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
 許可が無い環境では `.app` の生成まで成功してから `failed to run bundle_dmg.sh` で落ちる。  
 `bundle.targets` を `["app"]` にしておけば起きない。
 
+### mise が入れた Rust には rustfmt と clippy が付いてこない
+
+手元では入っているので気づかないが、CI では
+`error: 'cargo-fmt' is not installed for the toolchain '1.98.0-aarch64-apple-darwin'`
+で `pnpm check` の最後の段が落ちる。
+
+`mise.toml` の `profile = "default"` だけでは足りない。  
+CI に `rustup component add rustfmt clippy` の 1 段を置く。  
+**検査ではなく用意なので、CI 側に書いてよい。**
+
 ### dev-dependencies の feature が本体のビルドを騙す
 
 `cargo test` と `cargo clippy --all-targets` は dev-dependencies を含めて解決するので、  

@@ -25,6 +25,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # mise が入れた Rust には rustfmt / clippy が付いてこない。
+      # `cargo fmt --check` が「コンポーネントが無い」で落ちるので明示的に足す。
+      # 検査そのものは pnpm check の 1 本のまま (docs/development.md の CI)
+      - name: rustup components
+        run: rustup component add rustfmt clippy
+
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
