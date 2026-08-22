@@ -125,6 +125,13 @@ features の `useEffect` で購読すると、`revision` の比較を通す場�
 6. コマンドは結果 (実行した段ごとの成否・stdout・stderr) を返し、**成否に関係なく**対象リポジトリのスナップショットを取り直して一緒に返す
 7. フロントは結果からトーストとコンソール行を作り、スナップショットで表示を更新する。`revision` が古ければ捨てる
 
+**結果をトーストとコンソールへ流すのは `store/results.ts` の 1 箇所。**  
+操作ごとに書くと、どれか 1 つだけコンソールに出ない、という壊れ方をする。  
+一括フェッチの集約 (11 件を 1 件のトーストにまとめる) も同じ場所で行う。
+
+git の結果ではない失敗 (設定の保存、更新の通知の購読) は `store/notify.ts` を通す。  
+`results.ts` は `CommandResult` 専用なので、ここを分けないとトーストのストアを直接叩く場所が features ごとに増える。
+
 読み取りと書き込みを混ぜない。  
 「操作 → 取り直し → 再描画」の一方向に統一して、楽観的更新はしない。  
 git の実態と画面がずれる方が、少し待つより困る。
@@ -187,4 +194,5 @@ flatten(repos: readonly RepoState[], { expanded, query, groupDirectories, localO
 スクロール領域はそのビューポート要素になるので、仮想化にはそれを渡す。
 
 ドラッグ並び替えは DOM のヒットテストではなくインデックスから位置を決める。  
-方針は [adr/0004-virtual-scroll.md](adr/0004-virtual-scroll.md) と [adr/0012-scrollbar-and-virtualization.md](adr/0012-scrollbar-and-virtualization.md)。
+方針は [adr/0004-virtual-scroll.md](adr/0004-virtual-scroll.md) と [adr/0012-scrollbar-and-virtualization.md](adr/0012-scrollbar-and-virtualization.md)。  
+実装をライブラリに任せず自前で書く理由は [adr/0019-reorder-without-dnd-kit.md](adr/0019-reorder-without-dnd-kit.md)。

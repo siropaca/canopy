@@ -39,6 +39,26 @@ class のルールがブラウザ既定の `[hidden] { display: none }` より�
 状態を更新するときは必ず元のデータを引き直して書き換える。  
 モックでプッシュ後に ahead が 0 にならなかった原因がこれ。
 
+### 導出した行を毎回作り直すと再描画が止まらない
+
+`orderedRepos` は「実行中」をストアの本数から `RepoState` へ写す。  
+写した行を**呼ばれるたびに新しく作る**と、`useShallow` の比較が毎回外れる。  
+外れる → 再描画 → また比較が外れる、で `Maximum update depth exceeded` になり、  
+**画面が真っ白になる** (実測。フェッチを 1 回押すだけで再現した)。
+
+セレクタが導出した値を返すときは、入力が同じなら**同じオブジェクト**を返す。  
+`WeakMap` に控えを持てば足りる。
+
+### 仮想リストの高さは jsdom では 0 になる
+
+`@tanstack/react-virtual` はスクロール要素の `offsetHeight` を見る。  
+jsdom はレイアウトを持たないので 0 を返し、**行を 1 つも描かない。**  
+`getBoundingClientRect` を差し替えても効かない (見ているのは `offsetHeight`)。
+
+寸法は `ResizeObserver` の通知からも入る。jsdom には `ResizeObserver` 自体が無いので、  
+テストの足場 (`src/test/setup-dom.ts`) で「観測した瞬間に 1 回だけ寸法を返す」スタブを置いた。  
+これで仮想リストの中身をテストで確かめられる。
+
 ### 選択のたびに再描画するとダブルクリックが成立しない
 
 1 回目の mousedown で DOM を作り直すと、2 回目のクリックのターゲットが別要素になり `dblclick` が発火しない。  
@@ -108,6 +128,24 @@ caffeinate -dis &        # 期限なし。終わったら kill する
 idle のサブエージェントはトークンを消費せず、セッションが終われば消える。  
 見た目の整理のために投げ直すと、8 体それぞれが起きて 1 ターン処理する分のコストがかかる。  
 **放置してよい。**
+
+### Tauri を差し替えたページで購読を外すとイベントが全部止まる
+
+フロントだけをブラウザで動かすとき、`window.__TAURI_INTERNALS__` に加えて  
+`window.__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener` も要る。  
+無いと購読の解除で例外が飛び、React が木ごと落として**画面が真っ白**になる。
+
+さらに、この `unregisterListener` を「イベント名ごと消す」実装にすると、  
+StrictMode の 1 本目の解除で 2 本目の購読まで消えて、一括フェッチの結果が永久に届かない。  
+**id で 1 本だけ外す。**
+
+### 検索欄の値を JS で書き換えると React の表示とずれる
+
+`input.value` をネイティブの setter で書いて `input` を撃つと、React の状態は更新されるが  
+DOM の表示だけ前の値のまま残ることがある (実測。ツリーは新しい語で絞り込まれているのに  
+検索欄には古い語が出ていた)。  
+**これは差し替えた側の都合。** 実際に文字を打つ経路では起きない。  
+確認は `computer` の `type` で行う。
 
 ### ブラウザで触るときの落とし穴が 2 つ
 
@@ -360,6 +398,12 @@ src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
 `tauri build` の `dmg` ターゲットは `bundle_dmg.sh` が AppleScript で Finder のウィンドウを整える。  
 許可が無い環境では `.app` の生成まで成功してから `failed to run bundle_dmg.sh` で落ちる。  
 `bundle.targets` を `["app"]` にしておけば起きない。
+
+### CSS Modules の検査はコメントの中も読む
+
+`src/test/css-modules.test.ts` は `styles[...]` の形を「動的な参照」として弾く。  
+**コメントに書いた例も拾う**ので、`styles[kind] は使わない` と説明を書くと落ちる。  
+説明では記号を使わずに書く。
 
 ### mise が入れた Rust には rustfmt と clippy が付いてこない
 

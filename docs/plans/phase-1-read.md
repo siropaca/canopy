@@ -96,14 +96,15 @@
 | `tempfile` (dev) | 統合テストの一時リポジトリ |
 | `tauri` の `test` feature (dev) | `mock_builder` でコマンドを IPC 越しに叩く |
 
-`dnd-kit` は入れていない。ドラッグ並び替えはフェーズ 3。
+`dnd-kit` は入れていない。ドラッグ並び替えはフェーズ 3。  
+フェーズ 3 では入れずに自前で書くと決めた ([../adr/0019-reorder-without-dnd-kit.md](../adr/0019-reorder-without-dnd-kit.md))。
 
 決めたこと。
 
 - **設定は store プラグインを使わず `serde_json` で読み書きする。** 理由は [../adr/0016-store-without-plugin.md](../adr/0016-store-without-plugin.md)
 - **Vitest の環境は拡張子で分けた。** `*.test.ts` は node、`*.test.tsx` は jsdom。`test.projects` で 2 つに分け、分かれていることをテストで固定した (`src/test/environment-*.test.*`)
 - **CSS Modules のクラス名は自作テストで縛った。** 生成ツールを入れず、`styles.foo` の参照と隣の `*.module.css` の定義を突き合わせる (`src/test/css-modules.test.ts`)。使っていないクラスと動的な `styles[key]` も落とす
-- **モックの `:root` の外の色を 37 個トークンへ昇格させた。** 全 55 トークン。影とオーバーレイの黒は「色ではなく効果」なのでトークンにしない
+- **モックの `:root` の外の色を 37 個トークンへ昇格させた。** 全 55 トークン (フェーズ 3 で `--console-line` を足して 56)。影とオーバーレイの黒は「色ではなく効果」なのでトークンにしない
 - **`RepoPath` を作れるのは `store` だけにした。** 登録済みのリポジトリ、その `worktree list` が返したパス、OS のフォルダ選択が返した値の 3 経路しかない ([../security.md](../security.md))
 - **`shared` から `ipc/types.ts` の型 import だけ許した。** `flatten()` が `RepoState` を受け取るため。実行時の import は今までどおり禁止 (`allowTypeImports`)
 - **`i64` / `u64` を `bigint` ではなく `number` で生成する。** `.cargo/config.toml` の `TS_RS_LARGE_INT`。IPC は JSON なので実行時は number で届き、`bigint` と宣言すると型が嘘になる

@@ -33,5 +33,6 @@
 | [0016](0016-store-without-plugin.md) | 設定は store プラグインを使わず自分で読み書きする | 採用 |
 | [0017](0017-typed-git-arguments.md) | git に渡す参照と sha は型で縛る | 採用 |
 | [0018](0018-command-result-steps.md) | 操作の結果は「段」の列で返す | 採用 |
+| [0019](0019-reorder-without-dnd-kit.md) | ドラッグ並び替えは dnd-kit を使わず自前で書く | 採用 |
 
 新しい ADR を足したらこの表にも追記する。
