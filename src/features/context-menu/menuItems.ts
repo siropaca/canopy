@@ -63,11 +63,17 @@ function v2(label: string): MenuItem {
   return { kind: "v2", label };
 }
 
+/** メニューの出し分けに要る、行の外の状態 */
+export interface MenuOptions {
+  /** 一括フェッチが走っているか。「すべてフェッチ」の有効条件 */
+  readonly bulkFetchRunning?: boolean;
+}
+
 /** メニューに出す項目。括りとディレクトリでは呼ばない (`hasMenu` で弾く) */
-export function menuItemsFor(row: RowNode, repo: RepoState): MenuItem[] {
+export function menuItemsFor(row: RowNode, repo: RepoState, options: MenuOptions = {}): MenuItem[] {
   switch (row.kind) {
     case "repo":
-      return repositoryItems(row, repo);
+      return repositoryItems(row, repo, options);
     case "branch":
       return row.branch.is_current ? currentBranchItems(row) : otherBranchItems(row, repo);
     case "remote":
@@ -79,7 +85,7 @@ export function menuItemsFor(row: RowNode, repo: RepoState): MenuItem[] {
   }
 }
 
-function repositoryItems(row: RepoRow, repo: RepoState): MenuItem[] {
+function repositoryItems(row: RepoRow, repo: RepoState, options: MenuOptions): MenuItem[] {
   const items: MenuItem[] = [
     action("このリポジトリをフェッチ", { type: "fetchRepo" }, !canFetch(row)),
     action("プル", { type: "pull" }, !canPull(row)),
@@ -92,7 +98,8 @@ function repositoryItems(row: RepoRow, repo: RepoState): MenuItem[] {
   }
   items.push(
     SEPARATOR,
-    action("すべてフェッチ", { type: "fetchAll" }),
+    // 対象は全リポジトリ。一括フェッチの最中は無効 (shared/lib/selection.ts)
+    action("すべてフェッチ", { type: "fetchAll" }, !canFetch(null, options.bulkFetchRunning)),
     SEPARATOR,
     { kind: "submenu", label: "パス/参照のコピー", items: copyItems(repo) },
     SEPARATOR,

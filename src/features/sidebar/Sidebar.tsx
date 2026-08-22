@@ -1,4 +1,3 @@
-import type { RowNode } from "@/ipc/types";
 import { classNames } from "@/shared/lib/classNames";
 
 import * as icons from "./icons";
@@ -7,19 +6,19 @@ import styles from "./Sidebar.module.css";
 /*
  * 左のアイコンツールバー。並びと有効条件は docs/specs/ui.md の「サイドバー」。
  *
- * コンソールとツリー表示のトグルはフェーズ 3。
  * フェッチは選択があればそのリポジトリ、無ければ全リポジトリ (docs/specs/ui.md)。
+ * **一括フェッチの最中は無効。** 有効条件は `shared/lib/selection.ts` が決める。
  *
  * ツールチップは `title` 属性で出す。モックのような自前の吹き出しはフェーズ 4。
  */
 
 interface SidebarProps {
-  /** 画面に見えている選択の種別。ボタンの有効条件に使う */
-  readonly selectedKind: RowNode["kind"] | null;
   /** 「選択対象をプル」を有効にできるか (shared/lib/selection.ts) */
   readonly pullEnabled: boolean;
   /** 選択中のリポジトリに実行中の操作があると無効 */
   readonly fetchEnabled: boolean;
+  /** 「リストから削除」を有効にできるか (shared/lib/selection.ts) */
+  readonly removeEnabled: boolean;
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
@@ -30,12 +29,15 @@ interface SidebarProps {
   readonly onCollapseAll: () => void;
   readonly onAddRepo: () => void;
   readonly onRemoveRepo: () => void;
+  readonly onToggleGroup: () => void;
+  readonly onToggleLocalOnly: () => void;
+  readonly onToggleConsole: () => void;
 }
 
 export function Sidebar({
-  selectedKind,
   pullEnabled,
   fetchEnabled,
+  removeEnabled,
   groupDirectories,
   localOnly,
   consoleOpen,
@@ -46,6 +48,9 @@ export function Sidebar({
   onCollapseAll,
   onAddRepo,
   onRemoveRepo,
+  onToggleGroup,
+  onToggleLocalOnly,
+  onToggleConsole,
 }: SidebarProps) {
   return (
     <div className={styles.strip}>
@@ -73,10 +78,10 @@ export function Sidebar({
       <Button label="すべて折りたたむ" onClick={onCollapseAll}>
         <icons.CollapseAll />
       </Button>
-      <Button label="グループ化 ディレクトリ" active={groupDirectories}>
+      <Button label="グループ化 ディレクトリ" active={groupDirectories} onClick={onToggleGroup}>
         <icons.Group />
       </Button>
-      <Button label="ローカルのみ表示" active={localOnly}>
+      <Button label="ローカルのみ表示" active={localOnly} onClick={onToggleLocalOnly}>
         <icons.LocalOnly />
       </Button>
 
@@ -85,17 +90,13 @@ export function Sidebar({
       <Button label="リポジトリを追加" onClick={onAddRepo}>
         <icons.AddRepo />
       </Button>
-      <Button
-        label="リポジトリをリストから削除"
-        disabled={selectedKind !== "repo"}
-        onClick={onRemoveRepo}
-      >
+      <Button label="リポジトリをリストから削除" disabled={!removeEnabled} onClick={onRemoveRepo}>
         <icons.RemoveRepo />
       </Button>
 
       <span className={styles.divider} />
 
-      <Button label="コンソール" active={consoleOpen}>
+      <Button label="コンソール" active={consoleOpen} onClick={onToggleConsole}>
         <icons.Console />
       </Button>
     </div>

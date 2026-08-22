@@ -1,6 +1,5 @@
 import type { Branch } from "@/ipc/generated/Branch";
 import type { ChangeList } from "@/ipc/generated/ChangeList";
-import type { CommandResult } from "@/ipc/generated/CommandResult";
 import type { RepoSnapshot } from "@/ipc/generated/RepoSnapshot";
 import type { BranchRow, RefRow, RepoRow, RowNode } from "@/ipc/types";
 import { useNow } from "@/shared/hooks/useNow";
@@ -33,8 +32,8 @@ import styles from "./DetailPane.module.css";
  * ボタンの有効条件は `shared/lib/selection.ts` の述語に寄せる。
  * サイドバーとコンテキストメニューが同じ判定を使う。
  *
- * 一番下の「最後の結果」は**フェーズ 2 限りの表示。** コンソールとトーストが
- * 入るフェーズ 3 で置き換える (docs/plans/phase-2-write.md)。
+ * **操作の結果はここに出さない。** 出し先はコンソールとトースト
+ * (docs/specs/ui.md の「コンソール」「トースト」)。
  */
 
 /** 詳細ペインのボタンから起こす操作 */
@@ -56,9 +55,6 @@ interface DetailPaneProps {
 
 export function DetailPane({ row, actions }: DetailPaneProps) {
   const repo = useRepoStore((state) => (row === null ? undefined : state.byId.get(row.repoId)));
-  const result = useRepoStore((state) =>
-    row === null ? undefined : state.lastResult.get(row.repoId),
-  );
   const snapshot = repo?.snapshot ?? null;
 
   if (row === null || row.kind === "section" || row.kind === "directory") {
@@ -72,7 +68,6 @@ export function DetailPane({ row, actions }: DetailPaneProps) {
         <div className={styles.pane}>
           <div className={styles.body}>
             <PendingRepositoryDetail row={row} onRemoveRepo={actions.onRemoveRepo} />
-            <LastResult result={result} />
           </div>
         </div>
       );
@@ -90,35 +85,8 @@ export function DetailPane({ row, actions }: DetailPaneProps) {
         ) : (
           <ReferenceDetail row={row} snapshot={snapshot} actions={actions} />
         )}
-        <LastResult result={result} />
       </div>
     </ScrollArea>
-  );
-}
-
-/**
- * 直近の操作の結果。
- *
- * **フェーズ 3 でコンソールとトーストに置き換える。** それまで結果が
- * どこにも出ないと、失敗したのかどうかが分からない
- * (docs/plans/phase-2-write.md の「決めたこと」)。
- */
-function LastResult({ result }: { readonly result: CommandResult | undefined }) {
-  if (result === undefined) return null;
-  // **色は `kind` で決める。** 省略は失敗ではないので赤で出さない
-  const failed = result.kind !== "skipped" && !result.ok;
-  return (
-    <>
-      <div className={styles.section}>最後の結果</div>
-      <div className={classNames(styles.result, failed ? styles.resultFailed : styles.resultOk)}>
-        {result.message ?? (result.ok ? "成功しました" : "失敗しました")}
-      </div>
-      {result.steps.map((step) => (
-        <div className={styles.command} key={step.command} title={step.command}>
-          {step.command}
-        </div>
-      ))}
-    </>
   );
 }
 
@@ -162,6 +130,8 @@ function PendingRepositoryDetail({
         <button
           type="button"
           className={styles.danger}
+          // 実行中は止める。消すと走っている操作の結果を捨てる先が無くなる
+          disabled={!canRemoveRepo(row)}
           onClick={() => {
             onRemoveRepo(row.repoId);
           }}

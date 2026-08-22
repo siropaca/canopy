@@ -102,6 +102,11 @@
   background: var(--head-sel);
 }
 
+/* 掴んでいる行。落とすまで薄いまま (docs/specs/ui.md) */
+.row.dragging {
+  opacity: 0.45;
+}
+
 .row.heading.dimmed {
   background: var(--head-nohit);
   color: var(--nohit);

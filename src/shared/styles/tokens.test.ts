@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { ROW_HEIGHT } from "./rowHeight";
+import { CONSOLE_LINE_HEIGHT, ROW_HEIGHT } from "./rowHeight";
 
 const MOCK = fileURLToPath(new URL("../../../docs/mock/tree.tmpl.html", import.meta.url));
 const TOKENS = fileURLToPath(new URL("./tokens.css", import.meta.url));
@@ -66,6 +66,7 @@ const TOKEN_NAMES = [
   "--danger-face",
   "--danger-fg",
   "--row",
+  "--console-line",
 ] as const;
 
 /**
@@ -218,5 +219,9 @@ describe("デザイントークン", () => {
 
   it("仮想化に渡す行高が --row と一致する", () => {
     expect(mock["--row"]).toBe(`${ROW_HEIGHT}px`);
+  });
+
+  it("コンソールの行高が --console-line と一致する", () => {
+    expect(mock["--console-line"]).toBe(`${CONSOLE_LINE_HEIGHT}px`);
   });
 });

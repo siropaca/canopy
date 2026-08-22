@@ -33,6 +33,8 @@ interface TreeRowProps {
   /** ダブルクリック。折りたためない行はチェックアウト (docs/specs/ui.md の「操作」) */
   readonly onActivate: (row: RowNode) => void;
   readonly onContextMenu: (row: RowNode, at: { readonly x: number; readonly y: number }) => void;
+  /** ドラッグで掴んでいる行か。薄くする (docs/specs/ui.md) */
+  readonly dragging?: boolean;
 }
 
 export const TreeRow = memo(function TreeRow({
@@ -42,6 +44,7 @@ export const TreeRow = memo(function TreeRow({
   onToggle,
   onActivate,
   onContextMenu,
+  dragging = false,
 }: TreeRowProps) {
   // 実行中の行は薄くする。スピナーは出さない (docs/specs/ui.md の「実行中の扱い」)
   const dimmed =
@@ -51,6 +54,7 @@ export const TreeRow = memo(function TreeRow({
     row.kind === "repo" && styles.heading,
     selected && styles.selected,
     dimmed && styles.dimmed,
+    dragging && styles.dragging,
   );
 
   return (

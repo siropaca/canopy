@@ -37,6 +37,12 @@ export interface UiStoreState {
   select: (key: string | null) => void;
   setQuery: (query: string) => void;
   setPaneWidth: (width: number) => void;
+  /** コンソールパネルの開閉。サイドバーのボタンとパネルの `✕` から */
+  toggleConsole: () => void;
+  /** コンソールを開く。トーストの `詳細を見る` から (トグルではない) */
+  setConsoleOpen: (open: boolean) => void;
+  toggleGroupDirectories: () => void;
+  toggleLocalOnly: () => void;
 }
 
 const creator: StateCreator<UiStoreState> = (set) => ({
@@ -78,6 +84,14 @@ const creator: StateCreator<UiStoreState> = (set) => ({
   setQuery: (query) => set(() => ({ query })),
 
   setPaneWidth: (width) => set(() => ({ paneWidth: clampPaneWidth(width) })),
+
+  toggleConsole: () => set((state) => ({ consoleOpen: !state.consoleOpen })),
+
+  setConsoleOpen: (open) => set(() => ({ consoleOpen: open })),
+
+  toggleGroupDirectories: () => set((state) => ({ groupDirectories: !state.groupDirectories })),
+
+  toggleLocalOnly: () => set((state) => ({ localOnly: !state.localOnly })),
 });
 
 export function clampPaneWidth(width: number): number {

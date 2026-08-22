@@ -1,0 +1,38 @@
+/* モックの .qbar に対応する。ツリーをスクロールしても残る */
+.bar {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* 入力欄の中に重ねる。モックは data URI だが、実装は色をトークンで塗る */
+.icon {
+  position: absolute;
+  left: 13px;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  color: var(--dim);
+  pointer-events: none;
+  stroke-width: 1.2;
+}
+
+.input {
+  width: 100%;
+  height: 27px;
+  padding: 0 7px 0 25px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--track);
+}

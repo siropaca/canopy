@@ -65,11 +65,16 @@ export function canCheckout(row: RowNode | null): boolean {
 /**
  * 「フェッチ」を有効にできるか。
  *
- * リポジトリを選んでいなければ全リポジトリが対象なので常に有効。
- * git を実行するので、実行中のリポジトリを選んでいるときだけ無効。
+ * リポジトリを選んでいなければ全リポジトリが対象。
+ * git を実行するので、実行中のリポジトリを選んでいると無効。
+ *
+ * **一括フェッチの最中は、全リポジトリが対象のフェッチを無効にする**
+ * (docs/specs/ui.md の「トースト」)。押せると同じ操作が積まれて、
+ * 集約したトーストの件数が実際と合わなくなる。
  */
-export function canFetch(row: RowNode | null): boolean {
-  return row === null || !row.running;
+export function canFetch(row: RowNode | null, bulkFetchRunning = false): boolean {
+  if (row === null) return !bulkFetchRunning;
+  return !row.running;
 }
 
 /** 「チェックアウトとプル」を有効にできるか。両方できるときだけ */

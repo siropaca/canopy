@@ -17,6 +17,7 @@ import {
   removeRepository,
   resetRequests,
 } from "./bootstrap";
+import { useConsoleStore } from "./useConsoleStore";
 import { orderedRepos, useRepoStore } from "./useRepoStore";
 import { useUiStore } from "./useUiStore";
 
@@ -172,11 +173,18 @@ describe("リポジトリの追加", () => {
     vi.mocked(ipc).removeRepo.mockResolvedValue(undefined);
     await addRepository();
     useUiStore.getState().select("r1|repo|");
+    useConsoleStore
+      .getState()
+      .append("r1", [{ lines: [{ kind: "command", text: "git fetch --prune" }] }], {
+        failed: false,
+      });
 
     await removeRepository("r1");
 
     expect(useRepoStore.getState().order).toEqual([]);
     expect(useUiStore.getState().selectedKey).toBeNull();
+    // タブを残すと、名前を引く先が無くなって生の id がタブに出る
+    expect(useConsoleStore.getState().blocks.has("r1")).toBe(false);
   });
 });
 

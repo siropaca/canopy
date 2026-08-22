@@ -14,6 +14,7 @@
 .empty {
   display: flex;
   height: 100%;
+  flex: 1;
   align-items: center;
   justify-content: center;
   padding: 0 16px;
@@ -23,4 +24,21 @@
   margin: 0;
   color: var(--disabled);
   text-align: center;
+}
+
+/* 行と挿入線を同じ座標系に置く器。高さは中の仮想リストが決める */
+.layer {
+  position: relative;
+}
+
+/* ドラッグの挿入線。リポジトリのブロック境界に出す */
+.dropLine {
+  position: absolute;
+  z-index: 1;
+  top: var(--drop-y, 0);
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--track);
+  pointer-events: none;
 }

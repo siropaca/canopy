@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import * as ipc from "@/ipc/repos";
 import { messageOf } from "@/shared/lib/errorMessage";
 
+import { notifyFailure } from "./notify";
 import { useRepoStore } from "./useRepoStore";
 import { toUiState, useUiStore } from "./useUiStore";
 
@@ -41,8 +42,8 @@ export function usePersistUiState(enabled: boolean): void {
       lastSaved = serialized;
 
       ipc.saveUiState(uiState).catch((error: unknown) => {
-        // フェーズ 3 でトーストにする。それまでは黙らせずにログへ出す
-        console.error("UI 状態の保存に失敗しました:", messageOf(error));
+        // **握りつぶさない。** 黙って落とすと、再起動して並び順が戻ってから気づく
+        notifyFailure(messageOf(error));
       });
     };
 

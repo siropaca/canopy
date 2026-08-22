@@ -11,6 +11,12 @@ use super::RepoSnapshot;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CommandStep {
+    /// Directory git actually ran in.
+    ///
+    /// **登録したパスとは限らない。** 別のワークツリーにあるブランチのプルは
+    /// そのワークツリーで走る (docs/specs/git-operations.md)。
+    /// コンソールの行はこれを出す (docs/specs/ui.md の「コンソール」)。
+    pub dir: String,
     /// The command line as the user would type it.
     pub command: String,
     /// `None` when git was killed by a signal or the deadline.
@@ -208,6 +214,7 @@ mod tests {
     #[test]
     fn ts_declaration_has_every_serde_key() {
         let step = CommandStep {
+            dir: "/Users/dev/canopy".to_owned(),
             command: "git push origin main".to_owned(),
             code: Some(0),
             stdout: String::new(),

@@ -25,6 +25,14 @@ interface VirtualRowsProps<T> {
   /** 画面外に余分に描く行数 */
   readonly overscan?: number;
   /**
+   * 行の高さを実測するか。
+   *
+   * コンソールの出力は折り返すので高さが一定にならない。固定高で描くと
+   * 折り返した分だけ行が重なる。ツリーは行高が一定なので実測しない
+   * (測るぶんだけ遅くなる)。
+   */
+  readonly measure?: boolean;
+  /**
    * 画面に入れておきたい行の鍵。
    *
    * **行の並びが変わったときだけ**追いかける。折りたたみで選択行が画面外へ
@@ -41,6 +49,7 @@ export function VirtualRows<T>({
   keyOf,
   renderRow,
   overscan = 12,
+  measure = false,
   revealKey,
 }: VirtualRowsProps<T>) {
   // React Compiler は useVirtualizer を含む関数の自動メモ化を諦める。
@@ -53,14 +62,23 @@ export function VirtualRows<T>({
     overscan,
   });
 
-  // 並びが変わったかどうかで判断する。選択の変更では動かさない
-  const previousItems = useRef(items);
+  /*
+   * 追いかけるのは「行が入れ替わって、追いたい行の位置が変わったとき」だけ。
+   *
+   * 配列の同一性だけで判断すると、**中身が同じでも作り直された配列**で動く。
+   * スナップショットは 1 件届くたびに新しい配列になるので、一括フェッチのあいだ
+   * 何度もスクロール位置が選択行へ引き戻される (docs/specs/ui.md の「スクロール」)。
+   * 逆に位置だけで判断すると、クリックで選択を変えただけでも動く。
+   */
+  const previous = useRef({ items, index: -1 });
   useEffect(() => {
-    if (previousItems.current === items) return;
-    previousItems.current = items;
-    if (revealKey === undefined) return;
-    const index = items.findIndex((item) => keyOf(item) === revealKey);
-    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
+    const index =
+      revealKey === undefined ? -1 : items.findIndex((item) => keyOf(item) === revealKey);
+    const movedRows = previous.current.items !== items;
+    const movedTarget = previous.current.index !== index;
+    previous.current = { items, index };
+    if (!movedRows || !movedTarget || index < 0) return;
+    virtualizer.scrollToIndex(index, { align: "auto" });
   }, [items, revealKey, keyOf, virtualizer]);
 
   return (
@@ -76,9 +94,12 @@ export function VirtualRows<T>({
           <div
             key={keyOf(item)}
             className={styles.row}
+            data-index={virtualRow.index}
+            // 実測するときだけ仮想化に要素を渡す。高さは測った値が入る
+            ref={measure ? virtualizer.measureElement : undefined}
             // eslint-disable-next-line no-restricted-syntax -- 行の位置は仮想化が計算する
             style={{
-              height: `${virtualRow.size}px`,
+              ...(measure ? {} : { height: `${virtualRow.size}px` }),
               transform: `translateY(${virtualRow.start}px)`,
             }}
           >

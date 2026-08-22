@@ -25,12 +25,17 @@ const REPO = makeRepo("r1", {
   tags: [makeRef("v1.0.0")],
 });
 
-function itemsFor(kind: RowNode["kind"], label?: string, repo: RepoState = REPO): MenuItem[] {
+function itemsFor(
+  kind: RowNode["kind"],
+  label?: string,
+  repo: RepoState = REPO,
+  options: { readonly bulkFetchRunning?: boolean } = {},
+): MenuItem[] {
   const row = build(repo).find(
     (item) => item.kind === kind && (label === undefined || labelOf(item) === label),
   );
   if (row === undefined) throw new Error(`${kind} ${label ?? ""} の行が無い`);
-  return menuItemsFor(row, repo);
+  return menuItemsFor(row, repo, options);
 }
 
 function labelOf(row: RowNode): string {
@@ -190,6 +195,14 @@ describe("タグ", () => {
 describe("リポジトリ見出し", () => {
   const items = itemsFor("repo");
 
+  /** 押せると同じ操作が積まれて、集約したトーストの件数が実際と合わなくなる */
+  it("一括フェッチの最中は「すべてフェッチ」を無効にする", () => {
+    const running = itemsFor("repo", undefined, REPO, { bulkFetchRunning: true });
+
+    expect(greyed(running)).toContain("すべてフェッチ");
+    expect(enabled(items)).toContain("すべてフェッチ");
+  });
+
   it("並びと文言が仕様どおり", () => {
     expect(labels(items)).toEqual([
       "このリポジトリをフェッチ",
@@ -241,6 +254,20 @@ describe("リポジトリ見出し", () => {
 
     expect(labels(itemsFor("repo", undefined, detached))).toContain("直前のブランチに戻る");
     expect(labels(itemsFor("repo"))).not.toContain("直前のブランチに戻る");
+  });
+
+  /** 実行中でも項目は消さない。並びが変わると押し間違える */
+  it("実行中の detached HEAD では「直前のブランチに戻る」をグレーで置く", () => {
+    const detached = makeRepo(
+      "r1",
+      { local: [makeBranch("main")], head: { kind: "detached", name: "v1.0.0" } },
+      { running: true },
+    );
+
+    const items = itemsFor("repo", undefined, detached);
+
+    expect(labels(items)).toContain("直前のブランチに戻る");
+    expect(greyed(items)).toContain("直前のブランチに戻る");
   });
 
   it("読み込み中でもフェッチと削除は押せて、プルは無効", () => {

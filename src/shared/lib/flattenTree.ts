@@ -57,6 +57,60 @@ interface Node<T> {
 }
 
 export function flatten(repos: readonly RepoState[], options: FlattenOptions): RowNode[] {
+  const rows: RowNode[] = [];
+  for (const repo of repos) {
+    rows.push(...rowsOf(repo, options));
+  }
+  return rows;
+}
+
+/**
+ * リポジトリ 1 件ぶんの行。**前回と同じ入力なら作り直さない。**
+ *
+ * 検索は 1 文字打つごとに全リポジトリの ref をツリー化する。
+ * 折りたたみを 1 つ動かしただけで 11 リポジトリぶん作り直すと、
+ * 行のオブジェクトも全部変わって `TreeRow` (memo) の再描画まで起きる
+ * (docs/plans/phase-3-around.md)。
+ *
+ * 鍵は `RepoState` そのもの。スナップショットや実行中が変われば
+ * ストア側が別のオブジェクトを作るので、そこで自然に作り直しになる。
+ */
+const memo = new WeakMap<RepoState, { readonly signature: string; readonly rows: RowNode[] }>();
+
+function rowsOf(repo: RepoState, options: FlattenOptions): RowNode[] {
+  const signature = signatureOf(repo, options);
+  const cached = memo.get(repo);
+  if (cached !== undefined && cached.signature === signature) return cached.rows;
+
+  const rows = buildRows(repo, options);
+  memo.set(repo, { signature, rows });
+  return rows;
+}
+
+/**
+ * そのリポジトリの見え方を決めるものだけを並べた鍵。
+ *
+ * **`expanded` はこのリポジトリの分だけ見る。** 集合そのものを鍵にすると、
+ * 隣のリポジトリを開いただけで全件が作り直しになる。
+ *
+ * 型を `FlattenOptions` の項目に固定しているのは、引数が増えたときに鍵の側を
+ * 直し忘れないため。落とすと「呼ばれているのに古い行が返る」形で壊れる。
+ */
+function signatureOf(repo: RepoState, options: FlattenOptions): string {
+  const prefix = `${repo.id}|`;
+  const open = [...options.expanded].filter((key) => key.startsWith(prefix)).sort();
+  const parts: Record<keyof FlattenOptions, string> = {
+    query: options.query.trim().toLowerCase(),
+    groupDirectories: String(options.groupDirectories),
+    localOnly: String(options.localOnly),
+    // **区切りは鍵に入らない文字にする。** ブランチ名には `,` も `|` も入るので、
+    // 見える文字でつなぐと別々の鍵の集合が同じ文字列になる
+    expanded: `${open.length}\u0000${open.join("\u0000")}`,
+  };
+  return Object.values(parts).join("\u0001");
+}
+
+function buildRows(repo: RepoState, options: FlattenOptions): RowNode[] {
   const query = options.query.trim().toLowerCase();
   const searching = query !== "";
   // 検索中は折りたたみを無視して全部開く。**保存した折りたたみは書き換えない**
@@ -64,23 +118,12 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
   const hits = (name: string) => !searching || name.toLowerCase().includes(query);
   const scopes = options.localOnly ? SECTIONS.slice(0, 1) : SECTIONS;
 
-  const rows: RowNode[] = [];
-  for (const repo of repos) {
-    const key = repoKey(repo.id);
-    const snapshot = repo.snapshot;
-    rows.push({
-      kind: "repo",
-      key,
-      depth: 0,
-      repoId: repo.id,
-      running: repo.running,
-      repo,
-      expanded: isOpen(key),
-      // ヒットが無いリポジトリも見出しだけ残す。薄く表示する (docs/specs/ui.md)
-      matched: !searching || (snapshot !== null && countHits(snapshot, scopes, hits) > 0),
-    });
-    if (snapshot === null || !isOpen(key)) continue;
-
+  const key = repoKey(repo.id);
+  const snapshot = repo.snapshot;
+  // 括りより先に見出しを置きたいが、ヒットの有無は括りを組んでみないと分からない。
+  // **数え直さない。** 同じ判定を 2 周すると検索のたびに全 ref を 2 回歩く
+  const below: RowNode[] = [];
+  if (snapshot !== null && isOpen(key)) {
     for (const section of scopes) {
       const items = itemsOf(snapshot, section.scope);
       // 中身が無い括りは出さない (タグが無ければタグの行も出ない)
@@ -88,19 +131,19 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
       const tree = group(items, options.groupDirectories, hits);
       if (searching && leafCount(tree) === 0) continue;
 
-      const key = sectionKey(repo.id, section.scope);
-      rows.push({
+      const sectionRowKey = sectionKey(repo.id, section.scope);
+      below.push({
         kind: "section",
-        key,
+        key: sectionRowKey,
         depth: 1,
         repoId: repo.id,
         running: repo.running,
         scope: section.scope,
         label: section.label,
-        expanded: isOpen(key),
+        expanded: isOpen(sectionRowKey),
       });
-      if (!isOpen(key)) continue;
-      emit(rows, tree, {
+      if (!isOpen(sectionRowKey)) continue;
+      emit(below, tree, {
         depth: 2,
         prefix: "",
         scope: section.scope,
@@ -110,7 +153,23 @@ export function flatten(repos: readonly RepoState[], options: FlattenOptions): R
       });
     }
   }
-  return rows;
+
+  return [
+    {
+      kind: "repo",
+      key,
+      depth: 0,
+      repoId: repo.id,
+      running: repo.running,
+      repo,
+      expanded: isOpen(key),
+      // ヒットが無いリポジトリも見出しだけ残す。薄く表示する (docs/specs/ui.md)。
+      // **まだ読めていないリポジトリは「ヒット無し」にしない。** 起動直後に
+      // 検索すると、読み込み中の分まで薄くなる
+      matched: !searching || snapshot === null || below.length > 0,
+    },
+    ...below,
+  ];
 }
 
 interface EmitContext {
@@ -226,21 +285,6 @@ function leafCount<T>(node: Node<T>): number {
   let count = node.leaves.length;
   for (const child of node.directories.values()) {
     count += leafCount(child);
-  }
-  return count;
-}
-
-/** 検索がその リポジトリで何件当たるか。括りをまたいで数える */
-function countHits(
-  snapshot: RepoSnapshot,
-  scopes: readonly { readonly scope: TreeScope }[],
-  hits: (name: string) => boolean,
-): number {
-  let count = 0;
-  for (const { scope } of scopes) {
-    for (const item of itemsOf(snapshot, scope)) {
-      if (hits(item.name)) count += 1;
-    }
   }
   return count;
 }

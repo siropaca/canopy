@@ -12,7 +12,7 @@ import {
 } from "@/test/factories";
 
 import { MAX_DEPTH, flatten, type FlattenOptions } from "./flattenTree";
-import { allKeys, defaultExpanded } from "./treeKeys";
+import { allKeys, allKeysOf, defaultExpanded } from "./treeKeys";
 
 const DEFAULTS: FlattenOptions = {
   expanded: new Set<string>(),
@@ -236,12 +236,43 @@ describe("flatten の検索", () => {
     ]);
   });
 
+  /**
+   * 検索中は全部開いて見えるので、シェブロンを押しても**見た目は変わらない**。
+   * 変わるのは保存する折りたたみだけ (docs/specs/ui.md の「検索」)。
+   * 押した結果は検索を消したときに現れる。
+   */
+  it("検索中に折りたたみを畳んでも、検索中の見た目は変わらない", () => {
+    const opened = new Set(["r1|repo|", "r1|local|"]);
+    const searching = options({ query: "rec-482", expanded: opened });
+
+    const before = outline(flatten([repo], searching));
+    const closed = new Set([...opened].filter((key) => key !== "r1|local|"));
+    const after = outline(flatten([repo], { ...searching, expanded: closed }));
+
+    expect(after).toEqual(before);
+    // 検索を消すと、押した結果 (ローカルが閉じている) が出る
+    expect(outline(flatten([repo], options({ expanded: closed })))).toEqual([
+      "repo:acme-api",
+      "  section:ローカル",
+      "  section:リモート",
+      "  section:タグ",
+    ]);
+  });
+
   it("`expanded` を書き換えない (保存した折りたたみを汚さない)", () => {
     const expanded = new Set(["r1|repo|"]);
 
     flatten([repo], options({ query: "rec-482", expanded }));
 
     expect([...expanded]).toEqual(["r1|repo|"]);
+  });
+
+  /** まだ読めていないリポジトリは「ヒット無し」と区別する。起動直後に全部薄くなる */
+  it("読み込み中のリポジトリは検索中でもヒット扱いにする", () => {
+    const rows = flatten([makeLoadingRepo("r9")], options({ query: "rec" }));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind === "repo" && rows[0].matched).toBe(true);
   });
 
   it("ヒットが無いリポジトリは見出しだけ残して薄くする", () => {
@@ -288,5 +319,90 @@ describe("flatten の検索", () => {
     expect(rows.filter((row) => row.kind === "branch").map((row) => row.label)).toEqual([
       "rec-482",
     ]);
+  });
+});
+
+/*
+ * リポジトリ単位のメモ化。
+ *
+ * 1 文字打つごとに全リポジトリの ref をツリー化するので、変わっていない
+ * リポジトリは作り直さない (docs/plans/phase-3-around.md)。
+ * 行のオブジェクトが同じままなら、`TreeRow` (memo) の再描画も起きない。
+ */
+describe("flatten のメモ化", () => {
+  const repos = [
+    makeRepo("r1", { local: [makeBranch("main"), makeBranch("feature/a")] }),
+    makeRepo("r2", { name: "acme-web", local: [makeBranch("main")] }),
+  ];
+  const expanded = new Set(allKeysOf(repos, ["local", "remote", "tag"]));
+
+  it("同じ入力なら行を作り直さない", () => {
+    const first = flatten(repos, options({ expanded }));
+    const second = flatten(repos, options({ expanded }));
+
+    expect(second).not.toBe(first);
+    for (const [index, row] of second.entries()) {
+      expect(row, row.key).toBe(first[index]);
+    }
+  });
+
+  it("別のリポジトリを折りたたんでも、関係ないリポジトリの行は作り直さない", () => {
+    const before = flatten(repos, options({ expanded }));
+
+    const narrowed = new Set([...expanded].filter((key) => !key.startsWith("r1|")));
+    const after = flatten(repos, options({ expanded: narrowed }));
+
+    const untouched = (rows: readonly RowNode[]) => rows.filter((row) => row.repoId === "r2");
+    for (const [index, row] of untouched(after).entries()) {
+      expect(row, row.key).toBe(untouched(before)[index]);
+    }
+  });
+
+  it("検索を消すと元の並びに戻る", () => {
+    const before = outline(flatten(repos, options({ expanded })));
+
+    flatten(repos, options({ expanded, query: "feature" }));
+    const after = outline(flatten(repos, options({ expanded })));
+
+    expect(after).toEqual(before);
+  });
+
+  /** `r1` と `r10` を前方一致で混ぜない。Rust 側も同じ境界をテストしている */
+  it("id が前方一致する別のリポジトリを開いても作り直さない", () => {
+    const many = [
+      makeRepo("r1", { local: [makeBranch("main")] }),
+      makeRepo("r10", { name: "acme-ops", local: [makeBranch("main")] }),
+    ];
+    const opened = new Set(allKeysOf(many, ["local"]));
+    const before = flatten(many, options({ expanded: opened }));
+
+    // r10 だけ畳む
+    const narrowed = new Set([...opened].filter((key) => !key.startsWith("r10|")));
+    const after = flatten(many, options({ expanded: narrowed }));
+
+    expect(after[0]).toBe(before[0]);
+  });
+
+  /** ブランチ名には `,` も `|` も入る。鍵をつないだ文字列が衝突しないこと */
+  it("鍵をつないだときに別の折りたたみ状態と衝突しない", () => {
+    const repo = makeRepo("r1", {
+      local: [makeBranch("a/x"), makeBranch("b/y"), makeBranch("a,r1|local|b/z")],
+    });
+    const one = new Set(["r1|repo|", "r1|local|", "r1|local|a,r1|local|b"]);
+    const two = new Set(["r1|repo|", "r1|local|", "r1|local|a", "r1|local|b"]);
+
+    const first = outline(flatten([repo], options({ expanded: one })));
+    const second = outline(flatten([repo], options({ expanded: two })));
+
+    expect(second).not.toEqual(first);
+  });
+
+  it("スナップショットが変わったら作り直す", () => {
+    const before = flatten(repos, options({ expanded }));
+
+    const updated = [{ ...repos[0]!, snapshot: repos[0]!.snapshot }, repos[1]!];
+    const after = flatten(updated, options({ expanded }));
+
+    expect(after[0]).not.toBe(before[0]);
   });
 });

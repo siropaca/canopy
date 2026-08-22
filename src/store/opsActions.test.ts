@@ -37,7 +37,20 @@ import {
   renameBranch,
   revealRepository,
 } from "./opsActions";
+import { useBulkFetchStore } from "./useBulkFetchStore";
+import { useConsoleStore } from "./useConsoleStore";
 import { orderedRepos, useRepoStore } from "./useRepoStore";
+import { useToastStore } from "./useToastStore";
+
+/** 直近のトースト。結果の出し先は `store/results.ts` の 1 本 */
+function lastToast() {
+  return useToastStore.getState().toasts[0];
+}
+
+/** そのリポジトリのコンソールに積まれた段 */
+function loggedBlocks(id: string) {
+  return useConsoleStore.getState().blocks.get(id) ?? [];
+}
 
 /** 実行中は本数が正で、`orderedRepos` が写す */
 function runningOf(id: string): boolean | undefined {
@@ -87,10 +100,17 @@ describe("操作の実行", () => {
       order: [],
       loaded: false,
       loadError: null,
-      lastResult: new Map(),
       running: new Map(),
     });
     useRepoStore.getState().registerAll([registration("r1", "acme-api")]);
+    useConsoleStore.setState({
+      blocks: new Map(),
+      activeTab: null,
+      failed: new Set(),
+      nextBlockId: 1,
+    });
+    useToastStore.getState().clear();
+    useBulkFetchStore.getState().reset();
   });
 
   it("実行中は印が付き、終わると解ける", async () => {
@@ -106,7 +126,7 @@ describe("操作の実行", () => {
     expect(runningOf("r1")).toBe(false);
   });
 
-  it("成功したらスナップショットと結果が入る", async () => {
+  it("成功したらスナップショットが入り、結果がトーストとコンソールに出る", async () => {
     vi.mocked(ipc.fetchRepo).mockResolvedValue(
       outcome({ result: makeCommandResult({ message: null }) }),
     );
@@ -116,7 +136,8 @@ describe("操作の実行", () => {
     const repo = useRepoStore.getState().byId.get("r1");
     expect(repo?.status).toBe("ready");
     expect(repo?.snapshot?.revision).toBe(5);
-    expect(useRepoStore.getState().lastResult.get("r1")?.ok).toBe(true);
+    expect(lastToast()?.kind).toBe("success");
+    expect(loggedBlocks("r1")).toHaveLength(1);
   });
 
   it("git が失敗しても結果として反映する。**出力を捨てない**", async () => {
@@ -128,10 +149,8 @@ describe("操作の実行", () => {
 
     await fetchRepository("r1");
 
-    const result = useRepoStore.getState().lastResult.get("r1");
-    expect(result?.ok).toBe(false);
-    expect(result?.message).toBe("認証に失敗しました");
-    expect(result?.steps).toHaveLength(1);
+    expect(lastToast()).toMatchObject({ kind: "failure", text: "認証に失敗しました" });
+    expect(loggedBlocks("r1")).toHaveLength(1);
     // 成否に関係なく取り直した状態が入る
     expect(useRepoStore.getState().byId.get("r1")?.snapshot?.revision).toBe(5);
   });
@@ -141,12 +160,12 @@ describe("操作の実行", () => {
 
     await fetchRepository("r1");
 
-    expect(useRepoStore.getState().lastResult.get("r1")).toEqual({
-      kind: "direct",
-      ok: false,
-      steps: [],
-      message: "ディレクトリが見つかりません",
+    expect(lastToast()).toMatchObject({
+      kind: "failure",
+      text: "ディレクトリが見つかりません",
     });
+    // git を実行していないので、コンソールに出す段は無い
+    expect(loggedBlocks("r1")).toHaveLength(0);
     expect(runningOf("r1")).toBe(false);
   });
 
@@ -267,6 +286,10 @@ describe("操作の実行", () => {
     await fetchAllRepositories();
 
     expect(runningOf("r1")).toBe(false);
+    // **集計も投げる前に始める。** 後回しにすると集約から漏れて、
+    // リポジトリごとのトーストが出る (docs/specs/ui.md の「トースト」)
+    expect(lastToast()?.text).toBe("1 リポジトリをフェッチしました (失敗 1)");
+    expect(useToastStore.getState().toasts).toHaveLength(1);
   });
 
   it("対象から外れた id の印は自分で解く", async () => {
@@ -302,12 +325,7 @@ describe("操作の実行", () => {
 
     await copyToClipboard("r1", "feature/a");
 
-    expect(useRepoStore.getState().lastResult.get("r1")).toEqual({
-      kind: "direct",
-      ok: false,
-      steps: [],
-      message: "コピーできません",
-    });
+    expect(lastToast()).toMatchObject({ kind: "failure", text: "コピーできません" });
     vi.unstubAllGlobals();
   });
 
@@ -316,7 +334,7 @@ describe("操作の実行", () => {
 
     await copyToClipboard("r1", "feature/a");
 
-    expect(useRepoStore.getState().lastResult.get("r1")?.message).toBe("コピーしました: feature/a");
+    expect(lastToast()).toMatchObject({ kind: "success", text: "コピーしました: feature/a" });
     vi.unstubAllGlobals();
   });
 
@@ -372,11 +390,14 @@ describe("操作の実行", () => {
     const preview = await loadPushPreview("r1", "main");
 
     expect(preview).toBeNull();
-    expect(useRepoStore.getState().lastResult.get("r1")?.ok).toBe(false);
+    expect(lastToast()).toMatchObject({
+      kind: "failure",
+      text: "知らないリポジトリの id です (r404)",
+    });
   });
 
   /** 文言は Rust 側が持つ。フロントで作り直さない */
-  it("Finder とターミナルは Rust が返した結果をそのまま覚える", async () => {
+  it("Finder とターミナルは Rust が返した文言をそのまま出す", async () => {
     vi.mocked(ipc.revealInFinder).mockResolvedValue(
       makeCommandResult({ kind: "direct", steps: [], message: "Finder で表示しました" }),
     );
@@ -385,12 +406,10 @@ describe("操作の実行", () => {
     );
 
     await revealRepository("r1");
-    expect(useRepoStore.getState().lastResult.get("r1")?.message).toBe("Finder で表示しました");
+    expect(lastToast()).toMatchObject({ kind: "success", text: "Finder で表示しました" });
 
     await openRepositoryInTerminal("r1");
-    const result = useRepoStore.getState().lastResult.get("r1");
-    expect(result?.ok).toBe(false);
-    expect(result?.message).toBe("open が失敗しました");
+    expect(lastToast()).toMatchObject({ kind: "failure", text: "open が失敗しました" });
   });
 
   /**
@@ -411,8 +430,8 @@ describe("操作の実行", () => {
     const repo = useRepoStore.getState().byId.get("r1");
     expect(repo?.status).toBe("error");
     expect(repo?.error).toBe("ディレクトリが見つかりません");
-    expect(useRepoStore.getState().lastResult.get("r1")?.message).toBe("フェッチしました");
-    expect(useRepoStore.getState().lastResult.get("r1")?.steps).toHaveLength(1);
+    expect(lastToast()?.text).toBe("フェッチしました");
+    expect(loggedBlocks("r1")).toHaveLength(1);
     expect(runningOf("r1")).toBe(false);
   });
 });

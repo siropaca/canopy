@@ -29,6 +29,12 @@ describe("UI のストア", () => {
     store = createUiStore();
   });
 
+  /** 値の出どころは docs/specs/ui.md の「画面の構成」 */
+  it("ペイン幅の範囲が仕様どおり", () => {
+    expect(MIN_PANE_WIDTH).toBe(240);
+    expect(MAX_PANE_WIDTH).toBe(760);
+  });
+
   it("既定はグループ化オン、ローカルのみオフ、幅 360 (docs/specs/ui.md)", () => {
     expect(state().groupDirectories).toBe(true);
     expect(state().localOnly).toBe(false);
@@ -97,6 +103,29 @@ describe("UI のストア", () => {
 
   it("数値でない幅を弾く", () => {
     expect(clampPaneWidth(Number.NaN)).toBe(MIN_PANE_WIDTH);
+  });
+
+  it("コンソールの開閉を切り替える", () => {
+    state().toggleConsole();
+    expect(state().consoleOpen).toBe(true);
+
+    state().toggleConsole();
+    expect(state().consoleOpen).toBe(false);
+  });
+
+  it("コンソールを開く (トーストの 詳細を見る から)", () => {
+    state().setConsoleOpen(true);
+    state().setConsoleOpen(true);
+
+    expect(state().consoleOpen).toBe(true);
+  });
+
+  it("グループ化とローカルのみ表示を切り替える", () => {
+    state().toggleGroupDirectories();
+    state().toggleLocalOnly();
+
+    expect(state().groupDirectories).toBe(false);
+    expect(state().localOnly).toBe(true);
   });
 });
 

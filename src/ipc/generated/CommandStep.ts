@@ -9,6 +9,14 @@
  */
 export type CommandStep = { 
 /**
+ * Directory git actually ran in.
+ *
+ * **登録したパスとは限らない。** 別のワークツリーにあるブランチのプルは
+ * そのワークツリーで走る (docs/specs/git-operations.md)。
+ * コンソールの行はこれを出す (docs/specs/ui.md の「コンソール」)。
+ */
+dir: string, 
+/**
  * The command line as the user would type it.
  */
 command: string, 

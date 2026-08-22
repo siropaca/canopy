@@ -602,11 +602,11 @@ async fn one(dir: &RepoPath, kind: OpKind, args: &[Arg<'_>]) -> Result<CommandRe
     // **書き込みは必ず締め切りを持つ。** 「付けるか付けないか」の分岐にすると、
     // 分岐を消しても振る舞いで見分けられない。値は `OpKind` が決める
     let output = run_within(dir, &raw, kind.deadline()).await?;
-    Ok(into_result(kind, output))
+    Ok(into_result(kind, dir, output))
 }
 
 /// Turn one git run into a result, masking credentials on the way out.
-fn into_result(kind: OpKind, output: GitOutput) -> CommandResult {
+fn into_result(kind: OpKind, dir: &RepoPath, output: GitOutput) -> CommandResult {
     let ok = output.is_ok();
     let message = if ok {
         None
@@ -615,6 +615,8 @@ fn into_result(kind: OpKind, output: GitOutput) -> CommandResult {
     };
     CommandResult::ran(
         vec![CommandStep {
+            // **実際に走らせた場所を載せる。** ワークツリーで走ることがある
+            dir: dir.to_display_string(),
             command: mask_credentials(&output.command),
             code: output.code,
             stdout: mask_credentials(&output.stdout),
@@ -702,11 +704,36 @@ mod tests {
         );
     }
 
+    /// コンソールの行に出す作業ディレクトリは、**実際に git を走らせた場所**。
+    ///
+    /// 別のワークツリーにあるブランチのプルは、そのワークツリーで実行する
+    /// (docs/specs/git-operations.md)。登録したパスを出すと、行を読んでも
+    /// どこで走ったか分からない。
+    #[test]
+    fn carries_the_directory_git_ran_in() {
+        let worktree = RepoPath::for_tests("/Users/dev/worktrees/feature-x");
+
+        let result = into_result(
+            OpKind::Pull,
+            &worktree,
+            GitOutput {
+                command: "git pull --rebase".to_owned(),
+                code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+            },
+        );
+
+        assert_eq!(result.steps[0].dir, "/Users/dev/worktrees/feature-x");
+    }
+
     /// 出力の認証情報は結果に載せる前に消す (docs/security.md)
     #[test]
     fn masks_credentials_in_every_field() {
         let result = into_result(
             OpKind::Push,
+            &RepoPath::for_tests("/repos/acme-api"),
             GitOutput {
                 command: "git push https://u:p@github.com/acme/api.git main".to_owned(),
                 code: Some(1),

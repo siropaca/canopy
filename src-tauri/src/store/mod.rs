@@ -175,6 +175,9 @@ impl Registry {
             });
         }
         registry.prune();
+        // 読めた時点で今の版として扱う。番号だけ古いまま書き戻すと、
+        // 次に版を上げたときに移行済みかどうかを判定できなくなる
+        registry.version = SCHEMA_VERSION;
         Ok(registry)
     }
 
@@ -503,6 +506,57 @@ mod tests {
         let loaded = Registry::load(&path).expect("load should succeed");
 
         assert_eq!(loaded.terminal_app(), DEFAULT_TERMINAL_APP);
+    }
+
+    /// 古い版が書いた `ui_state` も読める。**足りない項目は既定値で埋める**
+    ///
+    /// 保存の形が増えるたびに、前の版で書いた設定が「壊れている」と判定されると
+    /// 登録したリポジトリが読めなくなる (docs/adr/0016-store-without-plugin.md)。
+    #[test]
+    fn load_fills_in_ui_state_fields_added_later() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("canopy.json");
+        // **登録済みのリポジトリを 1 件入れる。** 0 件だと `repo_order` の
+        // 補完が効いているかを見られない (`registrations` は order を起点に引く)
+        std::fs::write(
+            &path,
+            r#"{"version":1,"next_id":2,"repos":[{"id":"r1","name":"acme-api","path":"/repos/acme-api","common_dir":"/repos/acme-api/.git"}],"ui_state":{"expanded":["r1|repo|"],"pane_width":420}}"#,
+        )
+        .expect("write");
+
+        let loaded = Registry::load(&path).expect("load should succeed");
+
+        let ui_state = loaded.ui_state();
+        assert_eq!(ui_state.pane_width, 420);
+        assert!(ui_state.group_directories);
+        assert!(!ui_state.local_only);
+        assert!(!ui_state.console_open);
+        assert_eq!(ui_state.window, None);
+        // `repo_order` が無い設定でも、登録済みのリポジトリは画面に出る
+        assert_eq!(ui_state.repo_order, vec!["r1".to_owned()]);
+        assert_eq!(loaded.registrations().len(), 1);
+        assert_eq!(loaded.ui_state().expanded, vec!["r1|repo|".to_owned()]);
+    }
+
+    /// 読み込んだ時点で今の版に揃える。番号だけ古いまま書き戻さない
+    #[test]
+    fn load_normalises_the_version() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("canopy.json");
+        std::fs::write(
+            &path,
+            r#"{"version":0,"next_id":1,"repos":[],"ui_state":{"expanded":[]}}"#,
+        )
+        .expect("write");
+
+        let loaded = Registry::load(&path).expect("load should succeed");
+        loaded.save(&path).expect("save should succeed");
+
+        let written = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            written.contains(&format!("\"version\": {SCHEMA_VERSION}")),
+            "{written}"
+        );
     }
 
     /// ファイルが無いのは空の状態。エラーにしない

@@ -4,6 +4,7 @@ import * as ipc from "@/ipc/repos";
 import { messageOf } from "@/shared/lib/errorMessage";
 import { defaultExpanded } from "@/shared/lib/treeKeys";
 
+import { useConsoleStore } from "./useConsoleStore";
 import { useRepoStore } from "./useRepoStore";
 import { useUiStore } from "./useUiStore";
 
@@ -91,5 +92,7 @@ export async function addRepository(): Promise<void> {
 export async function removeRepository(repoId: RepoId): Promise<void> {
   await ipc.removeRepo(repoId);
   useRepoStore.getState().remove(repoId);
+  // 消したリポジトリのタブを残さない。名前を引く先が無くなる
+  useConsoleStore.getState().forget(repoId);
   useUiStore.getState().select(null);
 }

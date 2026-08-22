@@ -5,11 +5,10 @@ import type { RepoSnapshot } from "@/ipc/generated/RepoSnapshot";
 import type { RepoState, RowNode } from "@/ipc/types";
 import { flatten } from "@/shared/lib/flattenTree";
 import { allKeysOf } from "@/shared/lib/treeKeys";
-import { useRepoStore } from "@/store/useRepoStore";
+import { orderedRepos, useRepoStore } from "@/store/useRepoStore";
 import {
   makeBranch,
   makeChanges,
-  makeCommandResult,
   makeErrorRepo,
   makeLoadingRepo,
   makeRef,
@@ -41,7 +40,6 @@ function setup(snapshot: Partial<RepoSnapshot>, state: Partial<RepoState> = {}):
     order: [repo.id],
     loaded: true,
     loadError: null,
-    lastResult: new Map(),
     running: new Map(),
   });
   return flatten([repo], {
@@ -74,7 +72,6 @@ describe("詳細ペイン", () => {
       order: [],
       loaded: true,
       loadError: null,
-      lastResult: new Map(),
       running: new Map(),
     });
   });
@@ -284,6 +281,36 @@ describe("詳細ペイン", () => {
     expect(pairs()).toEqual([["状態", "ディレクトリが見つかりません"]]);
     expect(onRemoveRepo).toHaveBeenCalledWith("r1");
   });
+
+  /**
+   * 実行中に消すと、走っている操作の結果を捨てる先が無くなる
+   * (docs/specs/ui.md の「実行中の扱い」)。一括フェッチ中は読めていない
+   * リポジトリにも実行中の印が付く
+   */
+  it("実行中は、読めていないリポジトリでも「リストから削除」を無効にする", () => {
+    const repo = { ...makeErrorRepo("r1", "ディレクトリが見つかりません", "acme-api") };
+    useRepoStore.setState({
+      byId: new Map([["r1", repo]]),
+      order: ["r1"],
+      loaded: true,
+      loadError: null,
+      running: new Map([["r1", 1]]),
+    });
+    const rows = flatten(orderedRepos(useRepoStore.getState()), {
+      expanded: new Set<string>(),
+      query: "",
+      groupDirectories: true,
+      localOnly: false,
+    });
+    const onRemoveRepo = vi.fn();
+
+    render(<DetailPane row={rows[0] ?? null} actions={makeActions({ onRemoveRepo })} />);
+    const remove = screen.getByText("リストから削除");
+    remove.click();
+
+    expect((remove as HTMLButtonElement).disabled).toBe(true);
+    expect(onRemoveRepo).not.toHaveBeenCalled();
+  });
 });
 
 describe("ボタン", () => {
@@ -363,107 +390,5 @@ describe("ボタン", () => {
     fireEvent.click(button("プッシュ"));
 
     expect(onPush).toHaveBeenCalledOnce();
-  });
-});
-
-describe("最後の結果", () => {
-  it("成功した結果とコマンドを出す", () => {
-    const rows = setup({ local: [makeBranch("main", { is_current: true })] });
-    useRepoStore.getState().setResult("r1", makeCommandResult({ message: null }));
-
-    render(<DetailPane row={find(rows, "repo")} actions={makeActions()} />);
-
-    expect(screen.getByText("最後の結果")).toBeDefined();
-    expect(screen.getByText("成功しました")).toBeDefined();
-    expect(screen.getByText("git fetch --prune")).toBeDefined();
-  });
-
-  it("失敗の文言を出す。**握りつぶさない**", () => {
-    const rows = setup({ local: [makeBranch("main", { is_current: true })] });
-    useRepoStore.getState().setResult(
-      "r1",
-      makeCommandResult({
-        ok: false,
-        message: "プルに失敗しました (未コミットの変更あり)",
-        steps: [{ command: "git pull --rebase", code: 1, stdout: "", stderr: "error" }],
-      }),
-    );
-
-    render(<DetailPane row={find(rows, "repo")} actions={makeActions()} />);
-
-    expect(screen.getByText("プルに失敗しました (未コミットの変更あり)")).toBeDefined();
-    expect(screen.getByText("git pull --rebase")).toBeDefined();
-  });
-
-  it("2 段の操作は両方のコマンドを出す", () => {
-    const rows = setup({ local: [makeBranch("main", { is_current: true })] });
-    useRepoStore.getState().setResult(
-      "r1",
-      makeCommandResult({
-        steps: [
-          { command: "git switch --end-of-options topic", code: 0, stdout: "", stderr: "" },
-          { command: "git pull --rebase", code: 0, stdout: "", stderr: "" },
-        ],
-      }),
-    );
-
-    render(<DetailPane row={find(rows, "repo")} actions={makeActions()} />);
-
-    expect(screen.getByText("git switch --end-of-options topic")).toBeDefined();
-    expect(screen.getByText("git pull --rebase")).toBeDefined();
-  });
-
-  /** 省略は失敗ではない。赤で出すとフェーズ 3 のトーストが同じ間違いをする */
-  it("省略された操作は失敗の色にしない", () => {
-    const rows = setup({ local: [makeBranch("main", { is_current: true })] });
-    useRepoStore.getState().setResult(
-      "r1",
-      makeCommandResult({
-        kind: "skipped",
-        ok: false,
-        steps: [],
-        message: "同じ操作を実行中です",
-      }),
-    );
-
-    render(<DetailPane row={find(rows, "repo")} actions={makeActions()} />);
-
-    const line = screen.getByText("同じ操作を実行中です");
-    expect(line.className).not.toContain("resultFailed");
-  });
-
-  it("結果が無ければ何も出さない", () => {
-    const rows = setup({ local: [makeBranch("main", { is_current: true })] });
-
-    render(<DetailPane row={find(rows, "repo")} actions={makeActions()} />);
-
-    expect(screen.queryByText("最後の結果")).toBeNull();
-  });
-
-  it("読めていないリポジトリでも結果は出す", () => {
-    useRepoStore.setState({
-      byId: new Map([["r1", makeErrorRepo("r1", "ディレクトリが見つかりません")]]),
-      order: ["r1"],
-      loaded: true,
-      loadError: null,
-      lastResult: new Map(),
-      running: new Map(),
-    });
-    const rows = flatten([makeErrorRepo("r1", "ディレクトリが見つかりません")], {
-      expanded: new Set<string>(),
-      query: "",
-      groupDirectories: true,
-      localOnly: false,
-    });
-    useRepoStore
-      .getState()
-      .setResult(
-        "r1",
-        makeCommandResult({ ok: false, message: "フェッチに失敗しました", steps: [] }),
-      );
-
-    render(<DetailPane row={rows[0] ?? null} actions={makeActions()} />);
-
-    expect(screen.getByText("フェッチに失敗しました")).toBeDefined();
   });
 });

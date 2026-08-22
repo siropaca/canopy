@@ -2,6 +2,7 @@ import type { RepoUpdate } from "@/ipc/generated/RepoUpdate";
 import { onRepoSnapshotUpdated } from "@/ipc/events";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
+import { recordBulkResult } from "./results";
 import { useRepoStore } from "./useRepoStore";
 
 /*
@@ -22,12 +23,12 @@ export function applyRepoUpdate(update: RepoUpdate): void {
     } else {
       repos.failRepo(update.repo_id, failure ?? "状態を読み直せませんでした");
     }
-    repos.setResult(update.repo_id, result);
+    recordBulkResult(update.repo_id, result);
   } else {
     // 状態そのものが読めなかった。見出しに理由を出して、行は消さない
     const message = update.error ?? "不明なエラー";
     repos.failRepo(update.repo_id, message);
-    repos.setResult(update.repo_id, { kind: "direct", ok: false, steps: [], message });
+    recordBulkResult(update.repo_id, { kind: "direct", ok: false, steps: [], message });
   }
   // 実行中の印は投入時に付けている (store/opsActions.ts)
   repos.endRun(update.repo_id);

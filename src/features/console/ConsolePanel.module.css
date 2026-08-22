@@ -1,0 +1,147 @@
+/* モックの .console に対応する (docs/mock/tree.tmpl.html) */
+.console {
+  display: flex;
+  flex: 0 0 230px;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border2);
+  background: var(--bg);
+}
+
+.tabs {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  gap: 1px;
+  overflow-x: auto;
+}
+
+.title {
+  padding: 0 8px;
+  color: var(--dim);
+}
+
+.tab {
+  display: flex;
+  max-width: 260px;
+  height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--dim);
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background: var(--hover);
+}
+
+.tab.tabActive {
+  background: var(--on);
+  color: var(--fg-strong);
+}
+
+/* タブの名前と閉じるボタン。地は親 (.tab) が持つ */
+.tabName,
+.tabClose {
+  height: 22px;
+  padding: 0;
+  color: inherit;
+}
+
+.tabName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabName:hover,
+.tabClose:hover {
+  background: transparent;
+  color: var(--fg-strong);
+}
+
+/* 失敗の印。そのタブを開くと消える */
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--err);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.readOnly {
+  padding: 0 6px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.close {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--dim);
+}
+
+.close:hover {
+  background: var(--hover);
+  color: var(--fg-strong);
+}
+
+.close svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+}
+
+/* 出力。**選択とコピーはできる。入力はできない** (docs/specs/ui.md) */
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 6px 10px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: var(--console-line);
+  user-select: text;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.empty {
+  margin: 0;
+  color: var(--disabled);
+}
+
+/* 行の色分け。コマンド行 / 通常の出力 / エラー行 */
+.command {
+  color: var(--out);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plain {
+  color: var(--out-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error {
+  color: var(--err-line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

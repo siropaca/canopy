@@ -246,6 +246,18 @@ describe("canFetch", () => {
       expect(canFetch(row), row.kind).toBe(false);
     }
   });
+
+  /** 一括フェッチ中に押せると、同じ操作を積んで結果の集約が崩れる */
+  it("一括フェッチの最中は、選択が無いとき (全リポジトリが対象) に無効", () => {
+    expect(canFetch(null, true)).toBe(false);
+  });
+
+  /** 止めるのは全リポジトリ対象のフェッチだけ。個別のフェッチは止めない */
+  it("一括フェッチの最中でも、実行中でない行を選んでいれば有効", () => {
+    for (const row of allKinds()) {
+      expect(canFetch(row, true), row.kind).toBe(true);
+    }
+  });
 });
 
 describe("canCheckoutAndPull", () => {

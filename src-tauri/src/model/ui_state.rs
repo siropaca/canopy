@@ -17,7 +17,12 @@ pub struct WindowState {
 }
 
 /// UI state that survives a restart (docs/specs/data-model.md).
+///
+/// **足りない項目は既定値で埋める** (`serde(default)`)。保存する項目が増えるたびに
+/// 前の版で書いた設定ファイルが「壊れている」と判定されると、登録したリポジトリごと
+/// 読めなくなる (docs/adr/0016-store-without-plugin.md)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
 #[ts(export)]
 pub struct UiState {
     /// Repository order, as ids.

@@ -1,6 +1,5 @@
 import { create, type StateCreator } from "zustand";
 
-import type { CommandResult } from "@/ipc/generated/CommandResult";
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
 import type { RepoSnapshot } from "@/ipc/generated/RepoSnapshot";
 import type { RepoId, RepoState } from "@/ipc/types";
@@ -25,13 +24,6 @@ export interface RepoStoreState {
   readonly loaded: boolean;
   /** 設定ファイルが読めなかったときの理由 */
   readonly loadError: string | null;
-  /**
-   * リポジトリごとの、直近の操作の結果。
-   *
-   * コンソールとトーストはフェーズ 3 なので、いまは詳細ペインの
-   * 「最後の結果」欄がここを読む (docs/plans/phase-2-write.md)。
-   */
-  readonly lastResult: ReadonlyMap<RepoId, CommandResult>;
   /**
    * リポジトリごとの実行中の本数。**「実行中」の正はここだけ。**
    *
@@ -59,8 +51,6 @@ export interface RepoStoreState {
   beginRun: (repoId: RepoId) => void;
   /** 操作が終わった。最後の 1 本が終わったときだけ無効化を解く */
   endRun: (repoId: RepoId) => void;
-  /** 直近の操作の結果を覚える */
-  setResult: (repoId: RepoId, result: CommandResult) => void;
 }
 
 const creator: StateCreator<RepoStoreState> = (set) => ({
@@ -68,7 +58,6 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
   order: [],
   loaded: false,
   loadError: null,
-  lastResult: new Map(),
   running: new Map(),
 
   registerAll: (repos) =>
@@ -120,17 +109,10 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
     set((state) => {
       const byId = new Map(state.byId);
       byId.delete(repoId);
-      // 消したリポジトリの結果と実行中を残さない。残すと id を使い回したときに混ざる
-      const lastResult = new Map(state.lastResult);
-      lastResult.delete(repoId);
+      // 消したリポジトリの実行中を残さない。残すと操作系が永久に無効になる
       const running = new Map(state.running);
       running.delete(repoId);
-      return {
-        byId,
-        order: state.order.filter((id) => id !== repoId),
-        lastResult,
-        running,
-      };
+      return { byId, order: state.order.filter((id) => id !== repoId), running };
     }),
 
   setOrder: (order) =>
@@ -148,14 +130,6 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
   beginRun: (repoId) => set((state) => ({ running: shifted(state.running, repoId, 1) })),
 
   endRun: (repoId) => set((state) => ({ running: shifted(state.running, repoId, -1) })),
-
-  setResult: (repoId, result) =>
-    set((state) => {
-      if (!state.byId.has(repoId)) return {};
-      const lastResult = new Map(state.lastResult);
-      lastResult.set(repoId, result);
-      return { lastResult };
-    }),
 });
 
 /** 実行中の本数を動かす。0 になった id は残さない */
@@ -188,6 +162,26 @@ function toLoading(repo: RepoRegistration): RepoState {
 }
 
 /**
+ * 実行中を写した `RepoState` の控え。
+ *
+ * **呼ぶたびに作り直さない。** `orderedRepos` は描画のたびに呼ばれるので、
+ * 毎回新しいオブジェクトを返すと `useShallow` の比較が必ず外れて、
+ * 再描画 -> 比較 -> 再描画 が止まらなくなる (実機で画面が真っ白になった)。
+ *
+ * `byId` の側は常に `running: false` なので、控えは 1 リポジトリにつき 1 つで足りる。
+ */
+const runningViews = new WeakMap<RepoState, RepoState>();
+
+function withRunning(repo: RepoState, running: boolean): RepoState {
+  if (repo.running === running) return repo;
+  const cached = runningViews.get(repo);
+  if (cached !== undefined && cached.running === running) return cached;
+  const view = { ...repo, running };
+  runningViews.set(repo, view);
+  return view;
+}
+
+/**
  * 並び順どおりのリポジトリ。**実行中の本数をここで写す。**
  *
  * 写すのを 1 箇所にしておかないと、`RepoState` を作り直す経路を足すたびに
@@ -199,9 +193,8 @@ export function orderedRepos(state: RepoStoreState): RepoState[] {
   for (const id of state.order) {
     const repo = state.byId.get(id);
     if (repo === undefined) continue;
-    const running = (state.running.get(id) ?? 0) > 0;
-    // 同じなら同じオブジェクトを返す。useShallow の比較を無駄に外さない
-    repos.push(repo.running === running ? repo : { ...repo, running });
+    // 同じ状態なら同じオブジェクトを返す。useShallow の比較を無駄に外さない
+    repos.push(withRunning(repo, (state.running.get(id) ?? 0) > 0));
   }
   return repos;
 }

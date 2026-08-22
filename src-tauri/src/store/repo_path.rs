@@ -39,4 +39,10 @@ impl RepoPath {
     pub fn to_display_string(&self) -> String {
         self.0.to_string_lossy().into_owned()
     }
+
+    /// テスト専用の入口。**製品コードからは作れない** (`cfg(test)`)。
+    #[cfg(test)]
+    pub fn for_tests(path: &str) -> Self {
+        Self(PathBuf::from(path))
+    }
 }

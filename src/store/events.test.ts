@@ -13,7 +13,10 @@ import {
   listenForRepoUpdates,
   resetListening,
 } from "./events";
+import { useBulkFetchStore } from "./useBulkFetchStore";
+import { useConsoleStore } from "./useConsoleStore";
 import { orderedRepos, useRepoStore } from "./useRepoStore";
+import { useToastStore } from "./useToastStore";
 
 function runningOf(id: string): boolean | undefined {
   return orderedRepos(useRepoStore.getState()).find((repo) => repo.id === id)?.running;
@@ -30,11 +33,18 @@ describe("一括フェッチのイベント", () => {
       order: [],
       loaded: false,
       loadError: null,
-      lastResult: new Map(),
       running: new Map(),
     });
     useRepoStore.getState().registerAll([registration("r1", "a")]);
     useRepoStore.getState().beginRun("r1");
+    useConsoleStore.setState({
+      blocks: new Map(),
+      activeTab: null,
+      failed: new Set(),
+      nextBlockId: 1,
+    });
+    useToastStore.getState().clear();
+    useBulkFetchStore.getState().reset();
   });
 
   it("届いた分から差し替えて、実行中を解く", () => {
@@ -47,7 +57,7 @@ describe("一括フェッチのイベント", () => {
     const repo = useRepoStore.getState().byId.get("r1");
     expect(repo?.snapshot?.revision).toBe(3);
     expect(runningOf("r1")).toBe(false);
-    expect(useRepoStore.getState().lastResult.get("r1")?.ok).toBe(true);
+    expect(useConsoleStore.getState().blocks.get("r1")).toHaveLength(1);
   });
 
   /** invoke の解決順は発行順と一致しない (docs/adr/0009-concurrency-and-refresh.md) */
@@ -77,9 +87,11 @@ describe("一括フェッチのイベント", () => {
     expect(repo?.status).toBe("error");
     expect(repo?.error).toBe("ディレクトリが見つかりません");
     expect(runningOf("r1")).toBe(false);
-    expect(useRepoStore.getState().lastResult.get("r1")?.message).toBe(
-      "ディレクトリが見つかりません",
-    );
+    // git を実行していないので段は無い。理由はトーストに出す
+    expect(useToastStore.getState().toasts[0]).toMatchObject({
+      kind: "failure",
+      text: "ディレクトリが見つかりません",
+    });
   });
 
   /** 実行中が解けないと、そのリポジトリの操作系が永久に無効になる */

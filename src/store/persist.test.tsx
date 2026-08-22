@@ -8,6 +8,7 @@ import * as ipc from "@/ipc/repos";
 
 import { SAVE_DEBOUNCE_MS, usePersistUiState } from "./persist";
 import { useRepoStore } from "./useRepoStore";
+import { useToastStore } from "./useToastStore";
 import { useUiStore } from "./useUiStore";
 
 function Persisting({ enabled = true }: { enabled?: boolean }) {
@@ -23,6 +24,7 @@ describe("UI 状態の保存", () => {
     useRepoStore.setState({ byId: new Map(), order: [], loaded: false, loadError: null });
     useUiStore.getState().setExpanded([]);
     useUiStore.getState().setPaneWidth(360);
+    useToastStore.getState().clear();
   });
 
   afterEach(() => {
@@ -50,6 +52,25 @@ describe("UI 状態の保存", () => {
         pane_width: 400,
       }),
     );
+  });
+
+  /** 黙って落とすと、再起動して並び順が戻ってから気づくことになる */
+  it("保存に失敗したらトーストで知らせる", async () => {
+    vi.mocked(ipc).saveUiState.mockRejectedValue("設定を保存できませんでした (canopy.json)");
+    render(<Persisting />);
+
+    act(() => {
+      useUiStore.getState().setPaneWidth(400);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(useToastStore.getState().toasts[0]).toMatchObject({
+      kind: "failure",
+      text: "設定を保存できませんでした (canopy.json)",
+    });
   });
 
   it("保存する形が変わっていなければ書かない", () => {

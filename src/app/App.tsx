@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import { ConsolePanel } from "@/features/console/ConsolePanel";
 import { ContextMenu } from "@/features/context-menu/ContextMenu";
 import { menuItemsFor } from "@/features/context-menu/menuItems";
 import { PushDialog } from "@/features/dialog/PushDialog";
@@ -9,10 +10,14 @@ import { DetailPane, type DetailActions } from "@/features/detail/DetailPane";
 import { RepoTree, TreePane } from "@/features/repo-tree/RepoTree";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { StatusBar } from "@/features/status-bar/StatusBar";
+import { Toasts } from "@/features/toast/Toasts";
+import { messageOf } from "@/shared/lib/errorMessage";
 import { canFetch, canPull, canRemoveRepo } from "@/shared/lib/selection";
 import { Splitter } from "@/shared/ui/Splitter";
 import { addRepository, loadEverything, removeRepository } from "@/store/bootstrap";
+import { toggleConsolePanel } from "@/store/consoleActions";
 import { listenForRepoUpdates } from "@/store/events";
+import { notifyFailure } from "@/store/notify";
 import {
   checkoutAndPullRow,
   checkoutRow,
@@ -23,6 +28,7 @@ import {
 } from "@/store/opsActions";
 import { usePersistUiState } from "@/store/persist";
 import { collapseAll, expandAll, expandLocalOnly } from "@/store/treeActions";
+import { bulkFetchRunning, useBulkFetchStore } from "@/store/useBulkFetchStore";
 import { useRepoStore } from "@/store/useRepoStore";
 import { useSelectedRow } from "@/store/useSelectedRow";
 import { useTreeRows } from "@/store/useTreeRows";
@@ -35,7 +41,6 @@ import { useRowActions } from "./useRowActions";
  * 画面の組み立て。構成は docs/specs/ui.md の「画面の構成」。
  *
  * ヘッダーは持たない。詳細ペインは常に表示する。
- * 検索欄とコンソールはフェーズ 3。
  */
 
 export function App() {
@@ -58,9 +63,9 @@ export function App() {
         else stop = unlisten;
       })
       .catch((error: unknown) => {
-        // 握りつぶさない。トーストはフェーズ 3 なので、いまはここだけが出力先。
+        // 握りつぶさない。リポジトリ個別の話ではないので、コンソールへの導線は付けない。
         // 購読できていないときは一括フェッチが 1 件ずつ投げる形に落ちる
-        console.error("canopy: イベントを購読できませんでした", error);
+        notifyFailure(`更新の通知を受け取れません: ${messageOf(error)}`);
       });
     return () => {
       cancelled = true;
@@ -73,6 +78,8 @@ export function App() {
   const selectedRow = useSelectedRow(rows);
   const paneWidth = useUiStore((state) => state.paneWidth);
   const setPaneWidth = useUiStore((state) => state.setPaneWidth);
+  const toggleGroupDirectories = useUiStore((state) => state.toggleGroupDirectories);
+  const toggleLocalOnly = useUiStore((state) => state.toggleLocalOnly);
   const toggles = useUiStore(
     useShallow((state) => ({
       groupDirectories: state.groupDirectories,
@@ -80,6 +87,9 @@ export function App() {
       consoleOpen: state.consoleOpen,
     })),
   );
+
+  // 一括フェッチの最中は「すべてフェッチ」を無効にする (docs/specs/ui.md)
+  const bulkRunning = useBulkFetchStore(bulkFetchRunning);
 
   const actions = useRowActions(rows);
   const menuRepo = useRepoStore((state) =>
@@ -136,9 +146,9 @@ export function App() {
     <div className={styles.app}>
       <div className={styles.split}>
         <Sidebar
-          selectedKind={selectedRow?.kind ?? null}
           pullEnabled={canPull(selectedRow)}
-          fetchEnabled={canFetch(selectedRow)}
+          fetchEnabled={canFetch(selectedRow, bulkRunning)}
+          removeEnabled={canRemoveRepo(selectedRow)}
           groupDirectories={toggles.groupDirectories}
           localOnly={toggles.localOnly}
           consoleOpen={toggles.consoleOpen}
@@ -153,6 +163,9 @@ export function App() {
               onRemoveRepo(selectedRow.repoId);
             }
           }}
+          onToggleGroup={toggleGroupDirectories}
+          onToggleLocalOnly={toggleLocalOnly}
+          onToggleConsole={toggleConsolePanel}
         />
         <TreePane>
           <RepoTree rows={rows} onActivate={actions.activate} onContextMenu={actions.openMenu} />
@@ -160,11 +173,13 @@ export function App() {
         <Splitter width={paneWidth} onWidth={setPaneWidth} />
         <DetailPane row={selectedRow} actions={detailActions} />
       </div>
+      <ConsolePanel />
       <StatusBar />
+      <Toasts />
 
       {actions.menu !== null && menuRepo !== undefined && (
         <ContextMenu
-          items={menuItemsFor(actions.menu.row, menuRepo)}
+          items={menuItemsFor(actions.menu.row, menuRepo, { bulkFetchRunning: bulkRunning })}
           at={actions.menu.at}
           onAction={(action) => {
             if (actions.menu !== null) actions.run(action, actions.menu.row);

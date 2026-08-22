@@ -6,6 +6,13 @@ import * as ipc from "@/ipc/ops";
 import { messageOf } from "@/shared/lib/errorMessage";
 
 import { isListeningForRepoUpdates } from "./events";
+import {
+  cancelBulkFetch,
+  recordBulkResult,
+  recordResult,
+  retargetBulkFetch,
+  startBulkFetch,
+} from "./results";
 import { orderedRepos, useRepoStore } from "./useRepoStore";
 
 /*
@@ -19,8 +26,18 @@ import { orderedRepos, useRepoStore } from "./useRepoStore";
  * (docs/specs/ui.md の「実行中の扱い」)。
  */
 
-/** 実行中の印を付けて操作を走らせ、結果とスナップショットを反映する */
-async function perform(repoId: RepoId, call: () => Promise<OpOutcome>): Promise<CommandResult> {
+/**
+ * 実行中の印を付けて操作を走らせ、結果とスナップショットを反映する。
+ *
+ * 結果の出し先 (コンソールとトースト) は `store/results.ts` の 1 本
+ * (docs/specs/ui.md の「コンソール」「トースト」)。
+ * 一括フェッチの 1 件として走るときだけ `record` を差し替える。
+ */
+async function perform(
+  repoId: RepoId,
+  call: () => Promise<OpOutcome>,
+  record: (repoId: RepoId, result: CommandResult) => void = recordResult,
+): Promise<CommandResult> {
   const repos = useRepoStore.getState();
   repos.beginRun(repoId);
   try {
@@ -33,12 +50,12 @@ async function perform(repoId: RepoId, call: () => Promise<OpOutcome>): Promise<
       repos.failRepo(repoId, outcome.snapshot_error ?? "状態を読み直せませんでした");
     }
     // **取り直しに失敗しても実行した git の出力は残す**
-    repos.setResult(repoId, outcome.result);
+    record(repoId, outcome.result);
     return outcome.result;
   } catch (error) {
     // アプリ側の異常 (ディレクトリが消えた、参照名が弾かれた)。握りつぶさない
     const failed = failure(messageOf(error));
-    repos.setResult(repoId, failed);
+    record(repoId, failed);
     return failed;
   } finally {
     repos.endRun(repoId);
@@ -82,9 +99,11 @@ export function fetchRepository(repoId: RepoId): Promise<CommandResult> {
 export async function fetchAllRepositories(): Promise<RepoId[]> {
   const repos = useRepoStore.getState();
   const known = orderedRepos(repos).map((repo) => repo.id);
+  // **集計も投げる前に始める。** イベントは invoke の解決より先に届き得る
+  startBulkFetch(known);
   if (!isListeningForRepoUpdates()) {
     for (const id of known) {
-      await fetchRepository(id);
+      await perform(id, () => ipc.fetchRepo(id), recordBulkResult);
     }
     return known;
   }
@@ -96,6 +115,7 @@ export async function fetchAllRepositories(): Promise<RepoId[]> {
   } catch (error) {
     // 一覧が引けないのはリポジトリ個別の話ではない。読み込みエラーとして出す
     for (const id of known) repos.endRun(id);
+    cancelBulkFetch();
     repos.setLoadError(messageOf(error));
     return [];
   }
@@ -107,6 +127,8 @@ export async function fetchAllRepositories(): Promise<RepoId[]> {
   for (const id of ids) {
     if (!known.includes(id)) repos.beginRun(id);
   }
+  // 実際に走った一覧に合わせる。外れた id を待ち続けるとボタンが戻らない
+  retargetBulkFetch(ids);
   return ids;
 }
 
@@ -184,7 +206,7 @@ export async function loadPushPreview(repoId: RepoId, branch: string): Promise<P
   try {
     return await ipc.getPushPreview(repoId, branch);
   } catch (error) {
-    useRepoStore.getState().setResult(repoId, failure(messageOf(error)));
+    recordResult(repoId, failure(messageOf(error)));
     return null;
   }
 }
@@ -194,41 +216,39 @@ export async function loadPushPreview(repoId: RepoId, branch: string): Promise<P
  * (docs/adr/0015-auxiliary-operations.md)。
  */
 export async function revealRepository(repoId: RepoId): Promise<void> {
-  await record(repoId, () => ipc.revealInFinder(repoId));
+  await runDirect(repoId, () => ipc.revealInFinder(repoId));
 }
 
 export async function openRepositoryInTerminal(repoId: RepoId): Promise<void> {
-  await record(repoId, () => ipc.openInTerminal(repoId));
+  await runDirect(repoId, () => ipc.openInTerminal(repoId));
 }
 
 /**
  * クリップボードへコピーする。IPC を通さないので、**結果の組み立てだけは
  * ここでやる** (docs/adr/0015-auxiliary-operations.md)。
  *
- * **失敗を黙って落とさない。** トーストはフェーズ 3 なので、いまは同じ欄に出す。
+ * **失敗を黙って落とさない。** トーストに出す。
  */
 export async function copyToClipboard(repoId: RepoId, text: string): Promise<void> {
-  const repos = useRepoStore.getState();
   try {
     await navigator.clipboard.writeText(text);
-    repos.setResult(repoId, {
+    recordResult(repoId, {
       kind: "direct",
       ok: true,
       steps: [],
       message: `コピーしました: ${text}`,
     });
   } catch (error) {
-    repos.setResult(repoId, failure(messageOf(error)));
+    recordResult(repoId, failure(messageOf(error)));
   }
 }
 
-/** Rust が組み立てた結果をそのまま覚える */
-async function record(repoId: RepoId, call: () => Promise<CommandResult>): Promise<void> {
-  const repos = useRepoStore.getState();
+/** Rust が組み立てた結果をそのまま流す */
+async function runDirect(repoId: RepoId, call: () => Promise<CommandResult>): Promise<void> {
   try {
-    repos.setResult(repoId, await call());
+    recordResult(repoId, await call());
   } catch (error) {
-    repos.setResult(repoId, failure(messageOf(error)));
+    recordResult(repoId, failure(messageOf(error)));
   }
 }
 

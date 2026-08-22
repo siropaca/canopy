@@ -30,7 +30,27 @@ function cells(container: HTMLElement): string[] {
 
 describe("ステータスバー", () => {
   beforeEach(() => {
-    useRepoStore.setState({ byId: new Map(), order: [], loaded: false, loadError: null });
+    useRepoStore.setState({
+      byId: new Map(),
+      order: [],
+      loaded: false,
+      loadError: null,
+      running: new Map(),
+    });
+  });
+
+  /**
+   * 実行中は `orderedRepos` が行を写し直す。写すたびに新しいオブジェクトを
+   * 作ると `useShallow` の比較が毎回外れて、**再描画が止まらなくなる**
+   * (実機で画面が真っ白になった)。
+   */
+  it("実行中のリポジトリがあっても描き続けない (無限ループにならない)", () => {
+    seed([makeRepo("r1", { local: [makeBranch("main")] })]);
+    useRepoStore.getState().beginRun("r1");
+
+    const { container } = render(<StatusBar />);
+
+    expect(cells(container)[0]).toBe("1 リポジトリ");
   });
 
   it("揃ったら合計を出す", () => {

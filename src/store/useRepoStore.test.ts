@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
-import { makeCommandResult, makeSnapshot } from "@/test/factories";
+import { makeSnapshot } from "@/test/factories";
 
 import { createRepoStore, orderedRepos, type RepoStoreState } from "./useRepoStore";
 
@@ -209,32 +209,44 @@ describe("リポジトリのストア", () => {
 
       expect(after[0]).toBe(before[0]);
     });
+
+    /**
+     * **実行中でも同じオブジェクトを返す。**
+     *
+     * 呼ぶたびに新しい行を作ると `useShallow` の比較が毎回外れて、
+     * 再描画 -> 比較 -> 再描画 の無限ループになる (実機で画面が真っ白になった)。
+     */
+    it("実行中でも、状態が変わっていなければ同じオブジェクトを返す", () => {
+      state().registerAll([registration("r1", "a")]);
+      state().beginRun("r1");
+
+      const before = orderedRepos(state());
+      const after = orderedRepos(state());
+
+      expect(before[0]?.running).toBe(true);
+      expect(after[0]).toBe(before[0]);
+    });
+
+    it("実行中が解けたら元のオブジェクトに戻る", () => {
+      state().registerAll([registration("r1", "a")]);
+      const idle = orderedRepos(state());
+
+      state().beginRun("r1");
+      const running = orderedRepos(state());
+      state().endRun("r1");
+
+      expect(running[0]).not.toBe(idle[0]);
+      expect(orderedRepos(state())[0]).toBe(idle[0]);
+    });
   });
 
-  describe("最後の結果", () => {
-    beforeEach(() => {
+  describe("リストからの削除", () => {
+    it("実行中の印も消す", () => {
       state().registerAll([registration("r1", "a")]);
-    });
-
-    it("リポジトリごとに覚える", () => {
-      state().setResult("r1", makeCommandResult({ message: "フェッチしました" }));
-
-      expect(state().lastResult.get("r1")?.message).toBe("フェッチしました");
-    });
-
-    it("知らない id では覚えない", () => {
-      state().setResult("r404", makeCommandResult());
-
-      expect(state().lastResult.has("r404")).toBe(false);
-    });
-
-    it("リストから削除したら結果も実行中も消す", () => {
       state().beginRun("r1");
-      state().setResult("r1", makeCommandResult());
 
       state().remove("r1");
 
-      expect(state().lastResult.has("r1")).toBe(false);
       expect(state().running.has("r1")).toBe(false);
     });
   });

@@ -115,7 +115,9 @@ export function makeCommandResult(overrides: Partial<CommandResult> = {}): Comma
   return {
     kind: "ran",
     ok: true,
-    steps: [{ command: "git fetch --prune", code: 0, stdout: "", stderr: "" }],
+    steps: [
+      { dir: "/repos/acme-api", command: "git fetch --prune", code: 0, stdout: "", stderr: "" },
+    ],
     message: null,
     ...overrides,
   };
