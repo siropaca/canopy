@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 
 import type { RowNode } from "@/ipc/types";
 import { useCssVariable } from "@/shared/hooks/useCssVariable";
+import { repoBlocks } from "@/shared/lib/reorder";
+import { stickyHeaderAt } from "@/shared/lib/stickyHeader";
 import { ROW_HEIGHT } from "@/shared/styles/rowHeight";
 import { ScrollArea } from "@/shared/ui/ScrollArea";
 import { VirtualRows } from "@/shared/ui/VirtualRows";
@@ -48,6 +50,12 @@ export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
   const drag = useRepoDrag(rows, viewport, rowsLayer);
   const draggingRepoId = drag?.repoId ?? null;
 
+  // いま見ているリポジトリの見出しを上端に残す。仮想化した行に position: sticky は
+  // 効かない (行が DOM から消える) ので、固定するぶんは別に描く
+  const scrollTop = useScrollTop(viewport);
+  const sticky = stickyHeaderAt(repoBlocks(rows), scrollTop, ROW_HEIGHT);
+  const stickyRow = sticky === null ? undefined : rows[sticky.rowIndex];
+
   const renderRow = useCallback(
     (row: RowNode) => (
       <TreeRow
@@ -83,19 +91,71 @@ export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
   }
 
   return (
-    <ScrollArea className={styles.scroll} onViewport={onViewport}>
-      <div className={styles.layer} ref={rowsLayer}>
-        <VirtualRows
-          items={rows}
-          rowHeight={ROW_HEIGHT}
-          scrollElement={viewport}
-          keyOf={keyOf}
-          renderRow={renderRow}
-          revealKey={selectedKey ?? undefined}
-        />
-        {drag !== null && <DropLine offset={drag.offset} />}
-      </div>
-    </ScrollArea>
+    <div className={styles.tree}>
+      <ScrollArea className={styles.scroll} onViewport={onViewport}>
+        <div className={styles.layer} ref={rowsLayer}>
+          <VirtualRows
+            items={rows}
+            rowHeight={ROW_HEIGHT}
+            scrollElement={viewport}
+            keyOf={keyOf}
+            renderRow={renderRow}
+            revealKey={selectedKey ?? undefined}
+          />
+          {drag !== null && <DropLine offset={drag.offset} />}
+        </div>
+      </ScrollArea>
+      {sticky !== null && stickyRow !== undefined && (
+        <StickyRepo offset={sticky.offset}>{renderRow(stickyRow)}</StickyRepo>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ビューポートのスクロール量。
+ *
+ * 仮想リストと同じ要素を見る。**描くたびに読む** ので、`scroll` が来ない
+ * 動き方 (ビューポートの差し替え、位置の復元) でも固定表示が置き去りにならない。
+ */
+function useScrollTop(viewport: HTMLElement | null): number {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      if (viewport === null) return () => undefined;
+      viewport.addEventListener("scroll", onChange, { passive: true });
+      return () => {
+        viewport.removeEventListener("scroll", onChange);
+      };
+    },
+    [viewport],
+  );
+
+  return useSyncExternalStore(subscribe, () => viewport?.scrollTop ?? 0);
+}
+
+/**
+ * 上端に固定するリポジトリ見出し。
+ *
+ * **行を並べている器の外に描く。** 仮想化すると画面外の行は DOM から消えるので、
+ * 見出しの行そのものは残せない (docs/adr/0004-virtual-scroll.md)。
+ * 器の外に出すことで、ドラッグの購読 (`.layer`) からも外れる。固定した見出しからの
+ * 並び替えは持たない (docs/adr/0019-reorder-without-dnd-kit.md)。
+ */
+function StickyRepo({
+  offset,
+  children,
+}: {
+  readonly offset: number;
+  readonly children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // 位置は実行時に決まる。JSX の `style` は使わない (docs/security.md)
+  useCssVariable(ref, "--sticky-y", `${offset}px`);
+
+  return (
+    <div className={styles.sticky} ref={ref}>
+      {children}
+    </div>
   );
 }
 

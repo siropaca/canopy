@@ -2,6 +2,7 @@ import { classNames } from "@/shared/lib/classNames";
 
 import * as icons from "./icons";
 import styles from "./Sidebar.module.css";
+import { Tooltip } from "./Tooltip";
 
 /*
  * 左のアイコンツールバー。並びと有効条件は docs/specs/ui.md の「サイドバー」。
@@ -9,7 +10,8 @@ import styles from "./Sidebar.module.css";
  * フェッチは選択があればそのリポジトリ、無ければ全リポジトリ (docs/specs/ui.md)。
  * **一括フェッチの最中は無効。** 有効条件は `shared/lib/selection.ts` が決める。
  *
- * ツールチップは `title` 属性で出す。モックのような自前の吹き出しはフェーズ 4。
+ * ツールチップは自前の吹き出し (Tooltip.tsx)。`title` は持たせない。
+ * 持たせると OS のツールチップと二重に出る。
  */
 
 interface SidebarProps {
@@ -116,16 +118,20 @@ interface ButtonProps {
 function Button({ label, children, v2 = false, active = false, disabled, onClick }: ButtonProps) {
   const off = v2 || (disabled ?? false);
   const className = classNames(styles.button, active && styles.active, off && styles.off);
+  // 見出しは 1 つ。ツールチップと読み上げの名前を分けない
+  const name = v2 ? `${label} (v2)` : label;
 
   return (
-    <button
-      type="button"
-      className={className}
-      title={v2 ? `${label} (v2)` : label}
-      disabled={off}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <Tooltip label={name}>
+      <button
+        type="button"
+        className={className}
+        aria-label={name}
+        disabled={off}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }

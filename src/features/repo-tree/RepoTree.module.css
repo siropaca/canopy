@@ -7,6 +7,19 @@
   outline: none;
 }
 
+/*
+ * スクロール領域と、その上端に重ねる固定見出しの器。
+ * 押し上げられて上へ抜ける見出しを検索欄まではみ出させないので `overflow: hidden`。
+ */
+.tree {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 .scroll {
   flex: 1;
 }
@@ -29,6 +42,20 @@
 /* 行と挿入線を同じ座標系に置く器。高さは中の仮想リストが決める */
 .layer {
   position: relative;
+}
+
+/*
+ * 上端に固定するリポジトリ見出し。
+ * 中身は通常の行なので、面の色と選択の色は行の CSS が持っている。
+ * 次のリポジトリの見出しに押されるぶんだけ上へずらす。
+ */
+.sticky {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  transform: translateY(var(--sticky-y, 0));
 }
 
 /* ドラッグの挿入線。リポジトリのブロック境界に出す */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUiStore } from "@/store/useUiStore";
 
@@ -17,7 +17,16 @@ import { useUiStore } from "@/store/useUiStore";
 /** 入力が止まってから絞り込むまで (ms) */
 export const SEARCH_DEBOUNCE_MS = 120;
 
-export function useSearchQuery(): [string, (text: string) => void] {
+export interface SearchQuery {
+  /** 入力欄に出す文字。ストアより先に動く */
+  readonly text: string;
+  /** 打鍵。絞り込みは `SEARCH_DEBOUNCE_MS` だけ遅れる */
+  readonly setText: (text: string) => void;
+  /** クリア。**遅らせず**に入力欄とストアの両方を空にする */
+  readonly clear: () => void;
+}
+
+export function useSearchQuery(): SearchQuery {
   const query = useUiStore((state) => state.query);
   const [text, setText] = useState(query);
   // 自分が書いた値。ストアからの追従と区別するために覚えておく
@@ -42,5 +51,13 @@ export function useSearchQuery(): [string, (text: string) => void] {
     setText(query);
   }, [query]);
 
-  return [text, setText];
+  const clear = useCallback(() => {
+    // 待たせない。ここでストアも空にするので、絞り込みもこの場で解ける。
+    // 自分の書き込みとして覚えておかないと、この後の追従で入力欄を上書きしてしまう
+    written.current = "";
+    setText("");
+    useUiStore.getState().setQuery("");
+  }, []);
+
+  return { text, setText, clear };
 }

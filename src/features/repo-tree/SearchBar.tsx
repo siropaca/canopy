@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import styles from "./SearchBar.module.css";
 import { useSearchQuery } from "./useSearchQuery";
 
@@ -8,12 +10,14 @@ import { useSearchQuery } from "./useSearchQuery";
  */
 
 export function SearchBar() {
-  const [text, setText] = useSearchQuery();
+  const { text, setText, clear } = useSearchQuery();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className={styles.bar}>
       <SearchIcon />
       <input
+        ref={inputRef}
         className={styles.input}
         type="text"
         placeholder="ブランチまたはタグ"
@@ -22,6 +26,21 @@ export function SearchBar() {
           setText(event.target.value);
         }}
       />
+      {/* 空のときは出さない。押した先は入力欄なので、ツールチップは付けない */}
+      {text !== "" && (
+        <button
+          type="button"
+          className={styles.clear}
+          aria-label="検索をクリア"
+          onClick={() => {
+            clear();
+            // 続けて打てるようにフォーカスを戻す。ブラウザは押したボタンへ移してしまう
+            inputRef.current?.focus();
+          }}
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }

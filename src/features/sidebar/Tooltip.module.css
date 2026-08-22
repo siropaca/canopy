@@ -1,0 +1,23 @@
+/* 見え方はモック (docs/mock/tree.tmpl.html の `.tip`) に合わせる */
+
+/* ホバーを受ける枠。包んだボタンの寸法をそのまま出す */
+.anchor {
+  display: flex;
+}
+
+.tip {
+  position: fixed;
+  z-index: 70;
+  padding: 2px 7px;
+  border: 1px solid var(--border2);
+  background: var(--head);
+  color: var(--fg);
+  font-size: 12px;
+  white-space: nowrap;
+  /* マウスの下に入り込ませない。入るとホバーが外れて自分で自分を消す */
+  pointer-events: none;
+  /* 影は色ではなく効果なのでトークンにしない (docs/design-system.md) */
+  box-shadow: 0 3px 10px rgb(0 0 0 / 40%);
+  left: var(--tip-left, 0);
+  top: var(--tip-top, 0);
+}

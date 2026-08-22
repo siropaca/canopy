@@ -23,6 +23,15 @@ function type(value: string) {
   fireEvent.change(input(), { target: { value } });
 }
 
+/** クリアボタンの名前。サイドバーのツールチップとは別物なので `title` は付けない */
+const CLEAR_LABEL = "検索をクリア";
+
+function clearButton(): HTMLButtonElement {
+  const found = screen.getByLabelText(CLEAR_LABEL);
+  if (!(found instanceof HTMLButtonElement)) throw new Error("ボタンではない");
+  return found;
+}
+
 function tick(ms: number) {
   act(() => {
     vi.advanceTimersByTime(ms);
@@ -115,5 +124,85 @@ describe("検索欄", () => {
     render(<SearchBar />);
 
     expect(input().value).toBe("main");
+  });
+});
+
+describe("検索欄のクリアボタン", () => {
+  it("入力が空のときは出さない", () => {
+    render(<SearchBar />);
+
+    expect(screen.queryByLabelText(CLEAR_LABEL)).toBeNull();
+  });
+
+  it("1 文字でも入っていたら出す", () => {
+    render(<SearchBar />);
+
+    type("r");
+
+    expect(screen.queryByLabelText(CLEAR_LABEL)).not.toBeNull();
+  });
+
+  it("保存してあった状態から開いても出す", () => {
+    useUiStore.setState({ query: "main" });
+
+    render(<SearchBar />);
+
+    expect(screen.queryByLabelText(CLEAR_LABEL)).not.toBeNull();
+  });
+
+  /** 押したことが分かる名前を読み上げに渡す。ツールチップは出さない */
+  it("名前を持ち、ツールチップは付けない", () => {
+    render(<SearchBar />);
+    type("rec");
+
+    expect(clearButton().getAttribute("aria-label")).toBe(CLEAR_LABEL);
+    expect(clearButton().hasAttribute("title")).toBe(false);
+  });
+
+  /** 遅らせるのは打鍵だけ。クリアは待たせない */
+  it("押すとデバウンスを待たずに入力欄とツリーの両方が空になる", () => {
+    render(<SearchBar />);
+    type("rec");
+    tick(SEARCH_DEBOUNCE_MS);
+    // 絞り込みに届いていない打鍵を残しておく
+    type("reca");
+
+    fireEvent.click(clearButton());
+
+    // 時間を進めずに見る
+    expect(input().value).toBe("");
+    expect(useUiStore.getState().query).toBe("");
+  });
+
+  /** 待っていた打鍵がクリアを上書きすると、消したはずの語で絞り込まれたままになる */
+  it("押したあとは、待っていた打鍵が後から効かない", () => {
+    render(<SearchBar />);
+    type("rec");
+
+    fireEvent.click(clearButton());
+    tick(SEARCH_DEBOUNCE_MS * 2);
+
+    expect(input().value).toBe("");
+    expect(useUiStore.getState().query).toBe("");
+  });
+
+  it("押すと消える", () => {
+    render(<SearchBar />);
+    type("rec");
+
+    fireEvent.click(clearButton());
+
+    expect(screen.queryByLabelText(CLEAR_LABEL)).toBeNull();
+  });
+
+  it("押したあともフォーカスは入力欄に残る", () => {
+    render(<SearchBar />);
+    type("rec");
+    // ブラウザは押した先へフォーカスを移す。続けて打てるように入力欄へ戻す
+    clearButton().focus();
+
+    fireEvent.click(clearButton());
+
+    expect(document.activeElement).toBe(input());
   });
 });

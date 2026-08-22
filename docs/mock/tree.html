@@ -48,13 +48,16 @@ button.pri{background:var(--btn);border-color:var(--btn-border);color:var(--fg-s
 button.pri:hover{background:var(--btn-hover)}
 button.danger:hover{background:var(--danger-face);color:var(--danger-fg)}
 
-.qbar{position:sticky;top:0;z-index:5;background:var(--bg);
+.qbar{position:sticky;top:0;z-index:6;background:var(--bg);
   border-bottom:1px solid var(--border);padding:6px}
 .qbar input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--fg);
   height:27px;padding:0 7px 0 25px;font:inherit;font-size:13px;outline:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236f737a' stroke-width='1.2'><circle cx='5' cy='5' r='3.2'/><path d='M7.5 7.5 10.5 10.5'/></svg>");
   background-repeat:no-repeat;background-position:6px 50%;background-size:14px}
 .qbar input:focus{border-color:var(--track)}
+.qbar .clr{position:absolute;top:0;right:6px;bottom:0;width:22px;padding:0;border:0;
+  background:transparent;color:var(--dim);font-size:12px;line-height:1}
+.qbar .clr:hover{background:transparent;color:var(--fg-strong)}
 .dim{color:var(--dim)}
 .status{height:20px;line-height:20px;background:var(--panel);border-top:1px solid var(--border);
   padding:0 7px;color:var(--dim);font-size:12px;display:flex;gap:13px;align-items:center}
@@ -119,6 +122,7 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .splitter{flex:0 0 5px;cursor:col-resize;border-right:1px solid var(--border);
   background:transparent}
 .splitter:hover,.splitter.drag{background:var(--head-selfoc);border-right-color:var(--head-selfoc)}
+.block{position:relative}
 .r{display:flex;align-items:center;gap:4px;height:var(--row);
   padding-left:calc(5px + var(--d,0) * 13px);padding-right:7px;cursor:default}
 .r:hover{background:var(--hover)}
@@ -127,7 +131,8 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
 .r .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .r .sp{flex:1}
 .r.repo{background:var(--head);color:var(--fg-strong);font-weight:600;
-  border-top:1px solid var(--border2);border-bottom:1px solid var(--head-line)}
+  border-top:1px solid var(--border2);border-bottom:1px solid var(--head-line);
+  position:sticky;top:40px;z-index:4}
 .r.repo.sel{background:var(--head-sel)}
 .treepane:focus .r.repo.sel{background:var(--head-selfoc)}
 .r.repo.nohit{color:var(--nohit);background:var(--head-nohit)}
@@ -287,7 +292,8 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
         <path d="M4.6 6.6 6.4 8.2 4.6 9.8M8.2 10h3"/></svg></button>
   </div>
   <div class="treepane" id="tree" tabindex="0">
-    <div class="qbar"><input id="q" placeholder="ブランチまたはタグ"></div>
+    <div class="qbar"><input id="q" placeholder="ブランチまたはタグ">
+      <button class="clr" id="qclr" aria-label="検索をクリア" hidden>✕</button></div>
     <div id="rows"></div>
   </div>
   <div class="splitter" id="splitter"></div>
@@ -445,13 +451,14 @@ function render(){
   let h="";
   for(const r of repos()){
     const key=`${r.n}|repo|`, open=isOpen(key), n=q?hits(r):1;
+    h+=`<div class="block">`;                        // 見出しの sticky をこの中で閉じる
     h+=push(`<div class="r repo${n?"":" nohit"}" draggable="true" data-repo="${esc(r.n)}" style="--d:0">
       ${IC.chev(open)}<span class="nm">${esc(r.n)}</span><span class="sp"></span>
       ${open?"":`${r.dirty?`<span class="badge d">●${r.dirty}</span>`:""}
       ${behindSum(r)?`<span class="badge b">${IC.down}${behindSum(r)}</span>`:""}
       ${aheadSum(r)?`<span class="badge a">${IC.up}${aheadSum(r)}</span>`:""}`}</div>`,
       {id:key,kind:"repo",repo:r,key});
-    if(!open) continue;
+    if(!open){ h+=`</div>`; continue; }
     h+=section(r,"local","ローカル",r.local.map(b=>{
       const w=wtOf(r,b.name);
       return {...b,wtPath:w?.p,wtName:w?w.p.split("/").pop():null,
@@ -461,6 +468,7 @@ function render(){
       h+=section(r,"remote","リモート",r.remote);
       h+=section(r,"tag","タグ",r.tags);
     }
+    h+=`</div>`;
   }
   rowsEl.innerHTML=h;
   paintSel();
@@ -937,24 +945,30 @@ function toggle(open){
 // キーボード操作は持たない (v1 はマウスのみ)
 detail.addEventListener("click",e=>{
   const b=e.target.closest("button[data-a]"); if(b) act(b.dataset.a); });
-qEl.oninput=e=>{ q=e.target.value.trim().toLowerCase(); render(); };
+const qClr=document.getElementById("qclr");
+qEl.oninput=e=>{ q=e.target.value.trim().toLowerCase(); qClr.hidden=e.target.value===""; render(); };
+qClr.onclick=()=>{ qEl.value=""; q=""; qClr.hidden=true; qEl.focus(); render(); };
 strip.addEventListener("click",e=>{
   const b=e.target.closest(".sb"); if(!b||b.classList.contains("off")) return;
   act(b.dataset.a);
 });
-let tipEl=null;
+let tipEl=null, tipTimer=null;
+const TIP_DELAY=500;                            // 触れてすぐ出すとうるさい
+const hideTip=()=>{ clearTimeout(tipTimer); tipEl?.remove(); tipEl=null; };
 strip.addEventListener("mouseover",e=>{
   const b=e.target.closest(".sb[data-tip]"); if(!b) return;
-  tipEl?.remove();
-  tipEl=document.createElement("div"); tipEl.className="tip";
-  tipEl.textContent=b.dataset.tip+(b.hasAttribute("data-v2")?" (v2)":"");
-  document.body.append(tipEl);
-  const r=b.getBoundingClientRect();
-  tipEl.style.left=(r.right+6)+"px";
-  tipEl.style.top=(r.top+(r.height-tipEl.offsetHeight)/2)+"px";
+  hideTip();
+  tipTimer=setTimeout(()=>{
+    tipEl=document.createElement("div"); tipEl.className="tip";
+    tipEl.textContent=b.dataset.tip+(b.hasAttribute("data-v2")?" (v2)":"");
+    document.body.append(tipEl);
+    const r=b.getBoundingClientRect();
+    tipEl.style.left=(r.right+6)+"px";
+    tipEl.style.top=(r.top+(r.height-tipEl.offsetHeight)/2)+"px";
+  },TIP_DELAY);
 });
 strip.addEventListener("mouseout",e=>{
-  if(!e.relatedTarget?.closest?.(".sb")){ tipEl?.remove(); tipEl=null; } });
+  if(!e.relatedTarget?.closest?.(".sb")) hideTip(); });
 
 const sp=document.getElementById("splitter");
 sp.addEventListener("mousedown",e=>{

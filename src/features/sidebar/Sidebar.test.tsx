@@ -1,11 +1,22 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 
 /*
  * ボタンの並びと有効条件 (docs/specs/ui.md の「サイドバー」)。
+ *
+ * ボタンは名前で引く。ツールチップを自前の吹き出しにしたので `title` は持たない
+ * (残すと OS のツールチップと二重に出る)。
  */
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
@@ -32,9 +43,19 @@ function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
 }
 
 function button(label: string): HTMLButtonElement {
-  const found = screen.getByTitle(label);
+  const found = screen.getByLabelText(label);
   if (!(found instanceof HTMLButtonElement)) throw new Error(`${label} がボタンではない`);
   return found;
+}
+
+/** ツールチップが出るまでホバーする。遅延は Tooltip.tsx */
+function hover(target: HTMLElement): void {
+  const anchor = target.parentElement;
+  if (anchor === null) throw new Error("ホバーを受ける要素が無い");
+  fireEvent.mouseEnter(anchor);
+  act(() => {
+    vi.advanceTimersByTime(500);
+  });
 }
 
 describe("サイドバー", () => {
@@ -43,6 +64,10 @@ describe("サイドバー", () => {
 
     expect(button("新規ブランチ (v2)").disabled).toBe(true);
     expect(button("ブランチの削除 (v2)").disabled).toBe(true);
+
+    hover(button("新規ブランチ (v2)"));
+
+    expect(screen.getByRole("tooltip").textContent).toBe("新規ブランチ (v2)");
   });
 
   it("選択で無効になるだけのボタンには (v2) を付けない", () => {
@@ -50,6 +75,23 @@ describe("サイドバー", () => {
 
     expect(button("選択対象をプル").disabled).toBe(true);
     expect(button("リポジトリをリストから削除").disabled).toBe(true);
+
+    hover(button("選択対象をプル"));
+
+    expect(screen.getByRole("tooltip").textContent).toBe("選択対象をプル");
+  });
+
+  it("ホバーしていない間はツールチップを出さない", () => {
+    renderSidebar();
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  /** 残すと自前の吹き出しと OS のツールチップが二重に出る */
+  it("ボタンは title 属性を持たない", () => {
+    renderSidebar();
+
+    expect(button("フェッチ").getAttribute("title")).toBeNull();
   });
 
   it("プルの有効条件は呼び出し側が決める", () => {
