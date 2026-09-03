@@ -132,12 +132,10 @@
   height: 16px;
   align-items: center;
   gap: 2px;
-  margin-left: 4px;
   padding: 0 4px;
   background: var(--badge-bg);
   color: var(--badge-fg);
   font-size: 11px;
-  font-weight: 400;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }

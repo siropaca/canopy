@@ -7,6 +7,11 @@
   gap: 3px;
   margin-left: 7px;
   line-height: 1;
+}
+
+/* 数字を出すものだけ等幅にする。ワークツリーは名前なので入れない */
+.dirty,
+.track {
   font-variant-numeric: tabular-nums;
 }
 
