@@ -2,6 +2,7 @@ import { memo } from "react";
 
 import type { RepoRow, RowNode } from "@/ipc/types";
 import { classNames } from "@/shared/lib/classNames";
+import { headNote } from "@/shared/lib/headLabel";
 import { canCheckout, hasMenu, isFoldable } from "@/shared/lib/selection";
 import { repoTotals } from "@/shared/lib/totals";
 import {
@@ -197,10 +198,11 @@ function RepoNote({ row }: { readonly row: RepoRow }) {
   if (repo.snapshot === null) return null;
 
   const totals = repoTotals(repo.snapshot);
-  const detached = repo.snapshot.head.kind === "detached";
+  // 文言は shared/lib/headLabel.ts の 1 本。詳細ペインと言い方を揃える
+  const note = headNote(repo.snapshot.head);
   return (
     <>
-      {detached && <span className={styles.note}>detached: {repo.snapshot.head.name}</span>}
+      {note !== null && <span className={styles.note}>{note}</span>}
       {!row.expanded && (
         <>
           {totals.dirty > 0 && (

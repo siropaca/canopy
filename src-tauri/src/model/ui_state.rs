@@ -7,8 +7,11 @@ pub const DEFAULT_PANE_WIDTH: u32 = 360;
 
 /// Position and size of the window. Restored because the app stays resident
 /// (docs/adr/0011-residency.md).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+///
+/// **フロントには渡さない。** 位置とサイズを知っているのは Rust 側だけなので、
+/// 共有する DTO に混ぜると「どちらにも流れないフィールド」になる
+/// (docs/specs/data-model.md の「設定ファイル」)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WindowState {
     pub x: f64,
     pub y: f64,
@@ -35,8 +38,6 @@ pub struct UiState {
     pub expanded: Vec<String>,
     pub pane_width: u32,
     pub console_open: bool,
-    /// `None` until the window has been moved or resized (filled in phase 4).
-    pub window: Option<WindowState>,
     pub group_directories: bool,
     pub local_only: bool,
 }
@@ -48,7 +49,6 @@ impl Default for UiState {
             expanded: Vec::new(),
             pane_width: DEFAULT_PANE_WIDTH,
             console_open: false,
-            window: None,
             // グループ化は既定オン、ローカルのみ表示は既定オフ (docs/specs/ui.md)
             group_directories: true,
             local_only: false,
@@ -64,12 +64,18 @@ mod tests {
     #[test]
     fn ts_declaration_has_every_serde_key() {
         assert_serde_keys_match_ts(&UiState::default());
-        assert_serde_keys_match_ts(&WindowState {
-            x: 0.0,
-            y: 0.0,
-            width: 1180.0,
-            height: 760.0,
-        });
+    }
+
+    /// ウィンドウの位置とサイズはフロントと共有しない。
+    ///
+    /// 共有すると「フロントが送っても捨てられる」フィールドになり、
+    /// フロントからウィンドウを動かす機能を足したときに無言で効かなくなる
+    #[test]
+    fn does_not_share_the_window_geometry_with_the_frontend() {
+        let keys = serde_json::to_value(UiState::default()).expect("UiState should serialize");
+        let object = keys.as_object().expect("UiState is an object");
+
+        assert!(!object.contains_key("window"), "{object:?}");
     }
 
     /// 既定はサイドバーの表示に合わせる。グループ化オン、ローカルのみ表示オフ

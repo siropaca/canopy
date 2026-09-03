@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use tokio::process::Command;
 
+use super::children::{Registered, spawn_registered};
 use super::parse::ParseError;
 use super::validate::{ObjectNameError, RefNameError};
 use crate::store::RepoPath;
@@ -58,6 +59,13 @@ pub enum GitError {
         command: String,
         source: std::io::Error,
     },
+    /// git ran but its output could not be read from the pipes.
+    ///
+    /// 起動の失敗と分ける。同じ文言にすると「git が無い」を疑って時間を溶かす。
+    Output {
+        command: String,
+        source: std::io::Error,
+    },
     /// git exited non-zero where the caller needed it to succeed.
     Failed {
         command: String,
@@ -102,6 +110,9 @@ impl fmt::Display for GitError {
             ),
             Self::Spawn { command, source } => {
                 write!(f, "git を実行できませんでした ({command}): {source}")
+            }
+            Self::Output { command, source } => {
+                write!(f, "git の出力を読めませんでした ({command}): {source}")
             }
             Self::Failed {
                 command,
@@ -186,8 +197,9 @@ fn build_command(dir: &RepoPath, args: &[&str]) -> Result<Command, GitError> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // 打ち切ったときに子プロセスを残さない。`wait_with_output` の future を
-        // 落とすと `Child` も落ちるので、そこで kill が走る
+        // future を落としたときの保険。**これだけでは孫が残る**ので、
+        // 締め切りとアプリ終了ではプロセスグループごと畳む
+        // (docs/adr/0020-process-group-kill.md)
         .kill_on_drop(true);
     for (name, value) in build_env() {
         command_line.env(name, value);
@@ -221,43 +233,155 @@ async fn run_inner(
     limit: Option<Duration>,
 ) -> Result<GitOutput, GitError> {
     let command = format_command(args);
-    let child = build_command(dir, args)?
-        .spawn()
-        .map_err(|source| GitError::Spawn {
-            command: command.clone(),
+    let spawn = |source| GitError::Spawn {
+        command: format_command(args),
+        source,
+    };
+    // **`spawn_registered` を通す。** 直に `spawn()` すると、アプリ終了時の
+    // 一括 kill がこの子を拾えない (docs/adr/0020-process-group-kill.md)
+    let (child, guard) = spawn_registered(&mut build_command(dir, args)?).map_err(spawn)?;
+    let collected = collect(child, guard, limit)
+        .await
+        .map_err(|source| GitError::Output {
+            command: format_command(args),
             source,
         })?;
 
-    let waited = match limit {
-        Some(limit) => match tokio::time::timeout(limit, child.wait_with_output()).await {
-            Ok(waited) => waited,
-            Err(_) => {
-                return Ok(GitOutput {
-                    command,
-                    code: None,
-                    stdout: String::new(),
-                    stderr: String::new(),
-                    timed_out: true,
-                });
-            }
-        },
-        None => child.wait_with_output().await,
-    };
-
-    let output = waited.map_err(|source| GitError::Spawn {
-        command: command.clone(),
-        source,
-    })?;
-
     Ok(GitOutput {
         command,
-        code: output.status.code(),
+        code: collected.code,
         // 不正なバイト列は U+FFFD にする。ファイル名 1 つで
         // スナップショット全体を落とさない
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        timed_out: false,
+        stdout: String::from_utf8_lossy(&collected.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&collected.stderr).into_owned(),
+        timed_out: collected.timed_out,
     })
+}
+
+/// Everything one child produced.
+#[derive(Debug)]
+struct Collected {
+    /// `None` は打ち切ったか、シグナルで死んだとき。
+    code: Option<i32>,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    timed_out: bool,
+}
+
+/// Drain both pipes and wait, killing the child's process group after `limit`.
+///
+/// **両方のパイプを読みながら待つ。** `wait()` だけを締め切りに掛けると、
+/// 出力がパイプの容量 (64KB) を超えた時点で子が書き込みでブロックして、
+/// 締め切りまで何も進まなくなる。
+///
+/// **打ち切っても読めた分は残す。** 空にすると、締め切りで落ちた理由が
+/// コンソールに何も残らない (docs/specs/ui.md の「コンソール」)。
+async fn collect(
+    mut child: tokio::process::Child,
+    guard: Registered<'_>,
+    limit: Option<Duration>,
+) -> std::io::Result<Collected> {
+    let mut stdout = child.stdout.take().expect("stdout is piped");
+    let mut stderr = child.stderr.take().expect("stderr is piped");
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+
+    let mut failure = None;
+    let pump = async {
+        let (from_stdout, from_stderr) =
+            tokio::join!(drain(&mut stdout, &mut out), drain(&mut stderr, &mut err));
+        from_stdout.and(from_stderr)
+    };
+    let timed_out = match limit {
+        Some(limit) => match tokio::time::timeout(limit, pump).await {
+            Ok(result) => {
+                failure = result.err();
+                false
+            }
+            Err(_) => true,
+        },
+        None => {
+            failure = pump.await.err();
+            false
+        }
+    };
+
+    if timed_out {
+        // **孫まで畳む。** 直の子だけ殺すと、接続待ちの `ssh` が残り、
+        // 下の `wait` もパイプが閉じるまで返らない
+        guard.kill();
+    }
+    // **待つ側にも上限を掛ける。** パイプを閉じてから居座る子がいると、
+    // ここに上限が無いとリポジトリのロックを持ったまま止まる
+    let status = wait_within(&mut child, &guard, limit).await?;
+    // **控えから外すのは `wait` のあと。** 回収する前に外すと、pid が
+    // 別のプロセスに割り当て直されたときに他人の控えを消す
+    // (docs/adr/0020-process-group-kill.md)
+    drop(guard);
+    if let Some(source) = failure {
+        return Err(source);
+    }
+
+    Ok(Collected {
+        code: exit_code(status, timed_out),
+        stdout: out,
+        stderr: err,
+        timed_out,
+    })
+}
+
+/// Wait for the child, killing its group if it outlives `limit`.
+///
+/// パイプが閉じたあとも居座る子がいる。`wait` に上限が無いと、
+/// 締め切りを指定した呼び出しがそのまま待たされる。
+async fn wait_within(
+    child: &mut tokio::process::Child,
+    guard: &Registered<'_>,
+    limit: Option<Duration>,
+) -> std::io::Result<std::process::ExitStatus> {
+    let Some(limit) = limit else {
+        return child.wait().await;
+    };
+    match tokio::time::timeout(limit, child.wait()).await {
+        Ok(status) => status,
+        Err(_) => {
+            guard.kill();
+            child.wait().await
+        }
+    }
+}
+
+/// Exit code to report. **打ち切った実行は終了コードを持たない。**
+///
+/// 撃ったあとに読める値はこちらが送ったシグナルの結果なので、意味のある成否ではない。
+/// 締め切りと同時に子が正常終了した場合も「成功」にはしない。`timed_out` が立って
+/// いるのに `is_ok()` が true になると、打ち切りの文言が緑のトーストで出る。
+fn exit_code(status: std::process::ExitStatus, timed_out: bool) -> Option<i32> {
+    if timed_out { None } else { status.code() }
+}
+
+/// Read everything the pipe gives.
+///
+/// **`read_to_end` は使わない。** tokio が「キャンセル安全ではない。読んだ分が
+/// 失われ得る」と宣言している側の API なので、打ち切ったときに出力が残ることを
+/// そこに賭けない (いまの実装では残るが、契約は残さなくてよいと言っている)。
+/// `read` は「キャンセル安全」と宣言されている。
+async fn drain<R>(reader: &mut R, into: &mut Vec<u8>) -> std::io::Result<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    use tokio::io::AsyncReadExt;
+
+    // **バッファはヒープに置く。** スタックに 8KB の配列を置くと、この future を
+    // `try_join!` で 7 本並べたスナップショット取得でスタックが溢れる (実測)
+    let mut chunk = vec![0u8; 8 * 1024];
+    loop {
+        let read = reader.read(&mut chunk).await?;
+        if read == 0 {
+            return Ok(());
+        }
+        into.extend_from_slice(&chunk[..read]);
+    }
 }
 
 /// Run git and require a zero exit code.
@@ -276,6 +400,8 @@ pub async fn run_ok(dir: &RepoPath, args: &[&str]) -> Result<String, GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use super::super::children::{ChildGroups, Registered, own_process_group};
 
     /// コンソールに出す形は、ユーザーが打つ形と同じにする。
     /// `-c core.quotepath=false` のような内部の指定は混ぜない
@@ -330,6 +456,50 @@ mod tests {
         );
     }
 
+    /// 固定した環境変数・削る環境変数・固定オプションが、**実際に子プロセスの
+    /// 指定に載っている**こと。
+    ///
+    /// 一覧を作る関数 (`build_env` / `REMOVED_ENV` / `build_args`) の戻り値だけを
+    /// 見ていると、`build_command` がそれを使うのをやめても気づけない
+    /// (docs/testing.md の「配線を見ていない呼び出し」)
+    #[test]
+    fn hands_the_fixed_environment_and_options_to_git() {
+        use std::ffi::OsStr;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = repo_path_for_test(directory.path());
+
+        let command = build_command(&path, &["status", "--porcelain"]).expect("builds");
+
+        let declared: Vec<_> = command.as_std().get_envs().collect();
+        for (name, value) in build_env() {
+            assert!(
+                declared.contains(&(OsStr::new(name), Some(OsStr::new(value)))),
+                "{name} が子プロセスに渡っていない"
+            );
+        }
+        // `env_remove` は値なしで並ぶ
+        for name in REMOVED_ENV {
+            assert!(
+                declared.contains(&(OsStr::new(name), None)),
+                "{name} を消していない"
+            );
+        }
+        let args: Vec<_> = command.as_std().get_args().collect();
+        assert_eq!(
+            args,
+            [
+                "-c",
+                "core.quotepath=false",
+                "-c",
+                "color.ui=false",
+                "status",
+                "--porcelain"
+            ]
+        );
+        assert_eq!(command.as_std().get_current_dir(), Some(directory.path()));
+    }
+
     /// ディレクトリが消えていることを、git を起動する前に見分ける。
     /// 見出しに出す文言が「git を実行できませんでした」になると原因が分からない
     /// (docs/specs/ui.md)
@@ -375,6 +545,161 @@ mod tests {
 
         assert!(!output.timed_out);
         assert!(output.is_ok());
+    }
+
+    /// 打ち切っても、それまでに出た stdout / stderr は残す。
+    ///
+    /// 空にすると、フェッチが締め切りで落ちたときにコンソールへ何も残らない
+    #[tokio::test]
+    async fn keeps_the_output_of_a_run_it_had_to_kill() {
+        let groups = ChildGroups::new();
+        let (child, guard) = spawn_shell(&groups, "echo out; echo err >&2; sleep 30");
+
+        let started = std::time::Instant::now();
+        let collected = collect(child, guard, Some(Duration::from_millis(300)))
+            .await
+            .expect("a killed run is a result, not an error");
+
+        // **締め切りを過ぎたら撃つ。** 撃たないと子が自分で終わるまで待つことになる
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "締め切りを過ぎても待っている ({:?})",
+            started.elapsed()
+        );
+        assert!(collected.timed_out);
+        assert_eq!(String::from_utf8_lossy(&collected.stdout), "out\n");
+        assert_eq!(String::from_utf8_lossy(&collected.stderr), "err\n");
+        // 打ち切った実行は終了コードを持たない
+        assert_eq!(collected.code, None);
+    }
+
+    /// パイプの容量を超える出力でも詰まらない。
+    ///
+    /// `wait()` だけを待つ形にすると、書き込み側が 64KB でブロックして
+    /// 締め切りまで進まなくなる。**両方のパイプを同時に読む**
+    #[tokio::test]
+    async fn reads_more_output_than_a_pipe_holds() {
+        let groups = ChildGroups::new();
+        // stdout と stderr にそれぞれ 200KB 出す
+        let (child, guard) = spawn_shell(
+            &groups,
+            "i=0; while [ $i -lt 200 ]; do printf '%01000d\n' $i; printf '%01000d\n' $i >&2; \
+             i=$((i+1)); done",
+        );
+
+        let collected = collect(child, guard, Some(Duration::from_secs(10)))
+            .await
+            .expect("the run finishes");
+
+        assert!(
+            !collected.timed_out,
+            "パイプが詰まって締め切りに掛かっている"
+        );
+        assert_eq!(collected.stdout.len(), 200 * 1001);
+        assert_eq!(collected.stderr.len(), 200 * 1001);
+        assert_eq!(collected.code, Some(0));
+    }
+
+    /// パイプを閉じてから居座る子も、締め切りで畳む。
+    ///
+    /// **`wait` にも上限が要る。** 読み終えたら締め切りが外れる形にすると、
+    /// リポジトリのロックを持ったまま止まる
+    #[tokio::test]
+    async fn kills_a_child_that_outlives_the_deadline_with_its_pipes_closed() {
+        let groups = ChildGroups::new();
+        // 出力を出してから両方のパイプを閉じ、そのまま居座る
+        let (child, guard) = spawn_shell(&groups, "echo out; exec 1>&- 2>&-; sleep 30");
+
+        let started = std::time::Instant::now();
+        let collected = collect(child, guard, Some(Duration::from_millis(300)))
+            .await
+            .expect("a killed run is a result, not an error");
+
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "パイプが閉じたあと締め切りが効いていない ({:?})",
+            started.elapsed()
+        );
+        assert_eq!(String::from_utf8_lossy(&collected.stdout), "out\n");
+    }
+
+    /// 終了コードは打ち切っていないときだけそのまま返す
+    #[tokio::test]
+    async fn reports_the_exit_code_of_a_run_that_finished() {
+        let groups = ChildGroups::new();
+        let (child, guard) = spawn_shell(&groups, "exit 3");
+
+        let collected = collect(child, guard, None).await.expect("the run finishes");
+
+        assert_eq!(collected.code, Some(3));
+        assert!(!collected.timed_out);
+    }
+
+    /// 打ち切った実行は終了コードを持たない。
+    ///
+    /// 締め切りと同時に子が正常終了しても「成功」にしない
+    #[test]
+    fn drops_the_exit_code_of_a_killed_run() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let success = std::process::ExitStatus::from_raw(0);
+
+        assert_eq!(exit_code(success, false), Some(0));
+        assert_eq!(exit_code(success, true), None);
+    }
+
+    /// git は自分のプロセスグループで走る。
+    ///
+    /// グループを作らないと、締め切りとアプリ終了の kill が孫の `ssh` に届かない
+    /// (docs/adr/0020-process-group-kill.md)。中から自分のグループ id を出させて、
+    /// こちらのグループと違うことを見る
+    #[tokio::test]
+    async fn runs_git_in_its_own_process_group() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        // シェルの別名は作業ツリーの最上位で走るので、リポジトリが要る
+        std::process::Command::new("git")
+            .args(["init", "-q", "."])
+            .current_dir(directory.path())
+            .status()
+            .expect("git init");
+        let path = repo_path_for_test(directory.path());
+
+        let output = run(&path, &["-c", "alias.pg=!ps -o pgid= -p $$", "pg"])
+            .await
+            .expect("git runs");
+
+        assert!(output.is_ok(), "{output:?}");
+        let child_group: i32 = output
+            .stdout
+            .trim()
+            .parse()
+            .unwrap_or_else(|_| panic!("プロセスグループが読めない: {:?}", output.stdout));
+        // SAFETY: getpgrp は引数を取らず、自分のグループ id を返すだけ
+        let own_group = unsafe { libc::getpgrp() };
+        assert_ne!(
+            child_group, own_group,
+            "git がアプリと同じプロセスグループで走っている"
+        );
+    }
+
+    /// テスト用に任意のスクリプトを子プロセスとして起こす。
+    /// `collect` は git 以外の子でも同じ形で扱える
+    fn spawn_shell<'a>(
+        groups: &'a ChildGroups,
+        script: &str,
+    ) -> (tokio::process::Child, Registered<'a>) {
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        let child = own_process_group(&mut command)
+            .spawn()
+            .expect("sh should start");
+        let guard = groups.register(child.id());
+        (child, guard)
     }
 
     /// テスト用に `RepoPath` を作る。登録済みのリポジトリを 1 件だけ持つ

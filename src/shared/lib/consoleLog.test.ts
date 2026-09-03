@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { CommandResult } from "@/ipc/generated/CommandResult";
 import type { CommandStep } from "@/ipc/generated/CommandStep";
 
-import { consoleBlocks, consoleLines, formatTime } from "./consoleLog";
+import {
+  CONSOLE_BLOCK_LIMIT,
+  ELIDED_ID,
+  capBlocks,
+  consoleBlocks,
+  consoleLines,
+  formatTime,
+} from "./consoleLog";
 
 /*
  * コンソールに出す行の組み立て。
@@ -198,5 +205,61 @@ describe("行への展開", () => {
   it("何も無ければ空", () => {
     expect(consoleLines(undefined)).toEqual([]);
     expect(consoleLines([])).toEqual([]);
+  });
+});
+
+describe("capBlocks", () => {
+  const block = (id: string) => ({ id, lines: [{ kind: "command" as const, text: id }] });
+
+  it("上限は 500 (docs/specs/ui.md の「コンソール」)", () => {
+    expect(CONSOLE_BLOCK_LIMIT).toBe(500);
+  });
+
+  it("上限までは何も落とさない", () => {
+    const blocks = [block("b1"), block("b2"), block("b3")];
+
+    expect(capBlocks(blocks, 3)).toEqual(blocks);
+  });
+
+  /** **黙って捨てない。** 何件消えたかを画面に出す */
+  it("超えたら古い方から落として、件数を先頭のブロックで伝える", () => {
+    const blocks = [block("b1"), block("b2"), block("b3"), block("b4")];
+
+    const capped = capBlocks(blocks, 3);
+
+    expect(capped).toHaveLength(3);
+    expect(capped[0]?.id).toBe(ELIDED_ID);
+    expect(capped[0]?.lines[0]?.text).toBe("古い出力 2 件を省略しました");
+    // 新しい方から 2 件だけ残る (印が 1 枠を使う)
+    expect(capped.slice(1).map((entry) => entry.id)).toEqual(["b3", "b4"]);
+  });
+
+  it("さらに超えたら件数を足していく。印は増やさない", () => {
+    const first = capBlocks([block("b1"), block("b2"), block("b3"), block("b4")], 3);
+
+    const second = capBlocks([...first, block("b5"), block("b6")], 3);
+
+    expect(second).toHaveLength(3);
+    expect(second.filter((entry) => entry.id === ELIDED_ID)).toHaveLength(1);
+    expect(second[0]?.lines[0]?.text).toBe("古い出力 4 件を省略しました");
+    expect(second.slice(1).map((entry) => entry.id)).toEqual(["b5", "b6"]);
+  });
+
+  /**
+   * `slice(-0)` は `slice(0)` と同じで全件になる。
+   * **印を含めて `limit` 以下**という約束が破れると、逆に 1 件増える
+   */
+  it("上限が印  1 枠しか無いときは出力を残さない", () => {
+    const capped = capBlocks([block("b1"), block("b2"), block("b3")], 1);
+
+    expect(capped).toHaveLength(1);
+    expect(capped[0]?.id).toBe(ELIDED_ID);
+    expect(capped[0]?.lines[0]?.text).toBe("古い出力 3 件を省略しました");
+  });
+
+  it("印は行に開いたときも 1 行として出る", () => {
+    const capped = capBlocks([block("b1"), block("b2"), block("b3")], 2);
+
+    expect(consoleLines(capped)[0]?.text).toBe("古い出力 2 件を省略しました");
   });
 });

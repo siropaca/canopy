@@ -84,10 +84,19 @@ export function bulkFetchSettled(state: BulkFetchStoreState): boolean {
   return state.targets.size > 0 && state.done.size >= state.targets.size;
 }
 
-/** 集約したトーストの文言 */
+/**
+ * 集約したトーストの文言。
+ *
+ * **届かなかった分も出す。** 猶予を過ぎて畳んだときに「何件が返ってこなかったか」を
+ * 伏せると、数が合わない理由が分からない (docs/specs/ui.md の「トースト」)。
+ */
 export function bulkFetchSummary(state: BulkFetchStoreState): string {
+  const notes: string[] = [];
+  if (state.failures.size > 0) notes.push(`失敗 ${state.failures.size}`);
+  const missing = state.targets.size - state.done.size;
+  if (missing > 0) notes.push(`結果が届かない ${missing}`);
   const summary = `${state.targets.size} リポジトリをフェッチしました`;
-  return state.failures.size === 0 ? summary : `${summary} (失敗 ${state.failures.size})`;
+  return notes.length === 0 ? summary : `${summary} (${notes.join(", ")})`;
 }
 
 export const useBulkFetchStore = create<BulkFetchStoreState>()(creator);

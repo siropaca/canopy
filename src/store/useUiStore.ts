@@ -1,7 +1,6 @@
 import { create, type StateCreator } from "zustand";
 
 import type { UiState } from "@/ipc/generated/UiState";
-import type { WindowState } from "@/ipc/generated/WindowState";
 import type { RepoId } from "@/ipc/types";
 import { close, open } from "@/shared/lib/treeKeys";
 
@@ -23,8 +22,13 @@ export interface UiStoreState {
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
-  /** 復元はフェーズ 4。ここでは保存のために持っているだけ */
-  readonly windowState: WindowState | null;
+  /**
+   * ウィンドウが画面に出ているか。**保存しない。**
+   *
+   * 閉じてもプロセスは残るので、隠している間にも操作の結果が届く
+   * (docs/adr/0011-residency.md)。「コンソールが見えているか」の判定に要る。
+   */
+  readonly windowVisible: boolean;
 
   /** 保存してあった状態を読み込む */
   hydrate: (uiState: UiState) => void;
@@ -43,6 +47,8 @@ export interface UiStoreState {
   setConsoleOpen: (open: boolean) => void;
   toggleGroupDirectories: () => void;
   toggleLocalOnly: () => void;
+  /** Rust から届く `window_visibility` を受ける */
+  setWindowVisible: (visible: boolean) => void;
 }
 
 const creator: StateCreator<UiStoreState> = (set) => ({
@@ -53,7 +59,8 @@ const creator: StateCreator<UiStoreState> = (set) => ({
   groupDirectories: true,
   localOnly: false,
   consoleOpen: false,
-  windowState: null,
+  // 起動した時点では出ている
+  windowVisible: true,
 
   hydrate: (uiState) =>
     set(() => ({
@@ -62,7 +69,6 @@ const creator: StateCreator<UiStoreState> = (set) => ({
       groupDirectories: uiState.group_directories,
       localOnly: uiState.local_only,
       consoleOpen: uiState.console_open,
-      windowState: uiState.window,
     })),
 
   toggleExpanded: (key) =>
@@ -92,6 +98,11 @@ const creator: StateCreator<UiStoreState> = (set) => ({
   toggleGroupDirectories: () => set((state) => ({ groupDirectories: !state.groupDirectories })),
 
   toggleLocalOnly: () => set((state) => ({ localOnly: !state.localOnly })),
+
+  // **同じ値なら通知しない。** `visibilitychange` は同じ状態でも届くことがあり、
+  // そのたびに永続化のデバウンスが張り直される
+  setWindowVisible: (visible) =>
+    set((state) => (state.windowVisible === visible ? state : { windowVisible: visible })),
 });
 
 export function clampPaneWidth(width: number): number {
@@ -111,7 +122,6 @@ export function toUiState(state: UiStoreState, order: readonly RepoId[]): UiStat
     expanded: [...state.expanded].sort(),
     pane_width: state.paneWidth,
     console_open: state.consoleOpen,
-    window: state.windowState,
     group_directories: state.groupDirectories,
     local_only: state.localOnly,
   };

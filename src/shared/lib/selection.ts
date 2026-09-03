@@ -87,7 +87,8 @@ export function canCheckoutAndPull(row: RowNode | null): boolean {
  *
  * **実行中は無効。** 実行中に消すと、走っている操作の結果を捨てる先が無くなり、
  * 失敗しても画面のどこにも出ない (docs/specs/ui.md の「実行中の扱い」)。
- * 実行中は 30 秒で必ず解けるので、消せなくなることはない。
+ * git 側に締め切りがあるので必ず解ける。フェッチとプッシュは 30 秒、
+ * それ以外は 600 秒 (docs/specs/git-operations.md の「打ち切り」)。
  */
 export function canRemoveRepo(row: RowNode | null): boolean {
   return row !== null && !row.running && row.kind === "repo";

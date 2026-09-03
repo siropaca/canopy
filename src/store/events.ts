@@ -2,7 +2,8 @@ import type { RepoUpdate } from "@/ipc/generated/RepoUpdate";
 import { onRepoSnapshotUpdated } from "@/ipc/events";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-import { recordBulkResult } from "./results";
+import { noteWindowVisible } from "./consoleActions";
+import { recordBulkResult, wasAbandoned } from "./results";
 import { useRepoStore } from "./useRepoStore";
 
 /*
@@ -30,8 +31,10 @@ export function applyRepoUpdate(update: RepoUpdate): void {
     repos.failRepo(update.repo_id, message);
     recordBulkResult(update.repo_id, { kind: "direct", ok: false, steps: [], message });
   }
-  // 実行中の印は投入時に付けている (store/opsActions.ts)
-  repos.endRun(update.repo_id);
+  // 実行中の印は投入時に付けている (store/opsActions.ts)。
+  // **畳んだ分はそのときに外している。** ここでもう一度外すと、その時点で
+  // 別の操作が握っている 1 本を消す (store/results.ts)
+  if (!wasAbandoned(update.repo_id)) repos.endRun(update.repo_id);
 }
 
 /**
@@ -60,6 +63,28 @@ export async function listenForRepoUpdates(): Promise<UnlistenFn> {
     stopped = true;
     subscriptions -= 1;
     unlisten();
+  };
+}
+
+/**
+ * ウィンドウが画面に出ているかを追う。
+ *
+ * 閉じてもプロセスは残るので、隠している間にも結果が届く
+ * (docs/adr/0011-residency.md)。
+ *
+ * **`visibilitychange` を使う。** Rust から送ると、こちらが `hide()` した経路しか
+ * 拾えない。`Cmd+H`・最小化・別のデスクトップへの切り替えは Tauri のウィンドウ
+ * イベントに出てこないが、WebView の可視性としては全部届く (実測)。
+ */
+export function watchWindowVisibility(): () => void {
+  const apply = () => {
+    noteWindowVisible(document.visibilityState === "visible");
+  };
+  // 起動時に既に隠れていることもある
+  apply();
+  document.addEventListener("visibilitychange", apply);
+  return () => {
+    document.removeEventListener("visibilitychange", apply);
   };
 }
 

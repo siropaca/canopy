@@ -6,7 +6,7 @@ import { Splitter } from "./Splitter";
 /** jsdom は setPointerCapture を持っていないので、掴む部分だけ差し替える */
 function renderSplitter(width = 360) {
   const onWidth = vi.fn();
-  const { container } = render(<Splitter width={width} onWidth={onWidth} />);
+  const { container } = render(<Splitter widthAt={() => width} onWidth={onWidth} />);
   const element = container.firstElementChild;
   if (!(element instanceof HTMLElement)) throw new Error("スプリッタが描かれていない");
   element.setPointerCapture = () => undefined;

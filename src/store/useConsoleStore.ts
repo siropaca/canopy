@@ -1,7 +1,7 @@
 import { create, type StateCreator } from "zustand";
 
 import type { RepoId } from "@/ipc/types";
-import type { ConsoleBlock, IdentifiedBlock } from "@/shared/lib/consoleLog";
+import { capBlocks, type ConsoleBlock, type IdentifiedBlock } from "@/shared/lib/consoleLog";
 
 /*
  * コンソールの中身。
@@ -10,7 +10,8 @@ import type { ConsoleBlock, IdentifiedBlock } from "@/shared/lib/consoleLog";
  * (docs/specs/ui.md の「コンソール」)。パネルの開閉は `useUiStore` が持つ
  * (永続化するのはそちらだけ)。
  *
- * **出力は捨てない。** タブを閉じたときだけ消える。
+ * **出力はタブごとに `CONSOLE_BLOCK_LIMIT` まで。** 超えた分は古い方から落として、
+ * 落とした件数を先頭の 1 ブロックで伝える (docs/specs/ui.md の「コンソール」)。
  */
 
 /** 積み上げたブロック。鍵は仮想リストの key に使う */
@@ -52,7 +53,8 @@ const creator: StateCreator<ConsoleStoreState> = (set) => ({
       let nextBlockId = state.nextBlockId;
       const added = incoming.map((block) => ({ ...block, id: `b${nextBlockId++}` }));
       const blocks = new Map(state.blocks);
-      blocks.set(repoId, [...(state.blocks.get(repoId) ?? []), ...added]);
+      // **上限を超えたら古い方から落とす。** 落とした件数は先頭の 1 ブロックで伝える
+      blocks.set(repoId, capBlocks([...(state.blocks.get(repoId) ?? []), ...added]));
 
       return {
         blocks,

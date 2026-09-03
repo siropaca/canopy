@@ -100,9 +100,28 @@ describe("canPull", () => {
     expect(canPull(pick(rows, (row) => row.kind === "repo"))).toBe(true);
   });
 
+  /**
+   * ブランチ側は**わざと現在ブランチのまま**にしてある。
+   * `head.kind` を見ずに現在ブランチの有無だけで判定していると通ってしまう
+   * (docs/specs/ui.md の「detached HEAD」「リベース中」)。
+   */
   it("detached HEAD のリポジトリ行は無効 (docs/specs/ui.md)", () => {
     const rows = rowsOf(
-      makeRepo("r1", { local: [makeBranch("main")], head: { kind: "detached", name: "v1.0.0" } }),
+      makeRepo("r1", {
+        local: [makeBranch("main", { is_current: true })],
+        head: { kind: "detached", name: "v1.0.0" },
+      }),
+    );
+
+    expect(canPull(pick(rows, (row) => row.kind === "repo"))).toBe(false);
+  });
+
+  it("リベース中のリポジトリ行は無効", () => {
+    const rows = rowsOf(
+      makeRepo("r1", {
+        local: [makeBranch("topic", { is_current: true })],
+        head: { kind: "rebasing", name: "topic" },
+      }),
     );
 
     expect(canPull(pick(rows, (row) => row.kind === "repo"))).toBe(false);
@@ -328,6 +347,15 @@ describe("canCheckoutPrevious", () => {
     expect(canCheckoutPrevious(pick(detached, (row) => row.kind === "repo"))).toBe(true);
     expect(canCheckoutPrevious(pick(onBranch, (row) => row.kind === "repo"))).toBe(false);
     expect(canCheckoutPrevious(pick(detached, (row) => row.kind === "branch"))).toBe(false);
+  });
+
+  /** rebase の途中で `git checkout -` は `cannot rebase` で必ず失敗する */
+  it("リベース中は出さない", () => {
+    const rebasing = rowsOf(
+      makeRepo("r1", { local: [makeBranch("main")], head: { kind: "rebasing", name: "topic" } }),
+    );
+
+    expect(canCheckoutPrevious(pick(rebasing, (row) => row.kind === "repo"))).toBe(false);
   });
 });
 

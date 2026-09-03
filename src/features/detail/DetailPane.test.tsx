@@ -121,6 +121,16 @@ describe("詳細ペイン", () => {
     expect(pairs()).toContainEqual(["現在", "detached (v1.0.0)"]);
   });
 
+  it("リベース中は「現在」をリベース中 (ブランチ名) で出す", () => {
+    const rows = setup({ head: { kind: "rebasing", name: "topic" } });
+
+    render(
+      <DetailPane row={find(rows, "repo")} actions={makeActions({ onRemoveRepo: vi.fn() })} />,
+    );
+
+    expect(pairs()).toContainEqual(["現在", "リベース中 (topic)"]);
+  });
+
   it("リストから削除だけが動く。押すと id を渡す", () => {
     const rows = setup({});
     const onRemoveRepo = vi.fn();

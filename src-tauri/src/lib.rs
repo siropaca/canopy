@@ -7,6 +7,8 @@ pub mod os;
 pub mod queue;
 pub mod state;
 pub mod store;
+pub mod tray;
+pub mod window;
 
 /// Whether the WebView may navigate to `url`.
 ///
@@ -62,6 +64,92 @@ pub fn invoke_handler<R: tauri::Runtime>()
     ]
 }
 
+use tauri::Manager;
+
+/// What to do with one window event.
+///
+/// **閉じる要求は隠すに読み替える。** プロセスを終わらせない
+/// (docs/adr/0011-residency.md)。位置とサイズはここで控える。
+fn on_window_event<R: tauri::Runtime>(win: &tauri::Window<R>, event: &tauri::WindowEvent) {
+    // **どのウィンドウのイベントかを見る。** ハンドラは全ウィンドウ共通なので、
+    // 2 枚目を足したときに「サブウィンドウが閉じずに本体が消える」ことになる
+    if win.label() != window::MAIN_WINDOW {
+        return;
+    }
+    // 位置を触る API は `WebviewWindow` の側にある
+    let Some(main) = window::main_window(win.app_handle()) else {
+        return;
+    };
+    match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            // **隠す前に控える。** 隠したあとでは寸法が読めない
+            remember_window(&main);
+            window::hide_main(&main);
+            // 隠す時点で書き出す。次に走るのは終了時だけ
+            save_window(win.app_handle(), Wait::No);
+        }
+        tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => remember_window(&main),
+        _ => {}
+    }
+}
+
+/// Remember the window's geometry, if the value is worth keeping.
+///
+/// 捨てる条件は `window::worth_keeping` の 1 本 (テストが付いている側)。
+fn remember_window<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) {
+    let Some(geometry) = window::worth_keeping(win) else {
+        return;
+    };
+    if let Some(state) = win.try_state::<state::AppState>() {
+        state.record_window(geometry);
+    }
+}
+
+/// Whether to wait for the write. 終了時だけ待つ。
+enum Wait {
+    Yes,
+    No,
+}
+
+/// Write the remembered geometry. 呼ぶのは隠したときと終了するときだけ。
+///
+/// **報告はここ 1 本。** 2 形に分けると、伝え方を変えたときに片方だけ直る。
+fn save_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>, wait: Wait) {
+    let app = app.clone();
+    let write = async move {
+        if let Some(state) = app.try_state::<state::AppState>()
+            && let Err(error) = state.save_window().await
+        {
+            // 握りつぶさない。位置の保存はフロントに出す先が無いので stderr へ
+            eprintln!("canopy: ウィンドウの位置を保存できませんでした: {error}");
+        }
+    };
+    match wait {
+        // 終了直前なので待つ。待たないと位置が保存されない
+        Wait::Yes => tauri::async_runtime::block_on(write),
+        Wait::No => {
+            tauri::async_runtime::spawn(write);
+        }
+    }
+}
+
+/// Last thing the app does.
+///
+/// **走っている git を孫まで畳む。** `kill_on_drop` は future を落としたときだけ
+/// 効くので、プロセスが終わる経路では走らない (docs/adr/0020-process-group-kill.md)。
+fn shut_down<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let killed = git::kill_running_children();
+    if killed > 0 {
+        eprintln!("canopy: 実行中の git を {killed} 件終了しました");
+    }
+    // 隠さずに終了したときも位置を残す。隠れているなら最後に見えていた値が残る
+    if let Some(main) = window::main_window(app) {
+        remember_window(&main);
+    }
+    save_window(app, Wait::Yes);
+}
+
 /// Start the Tauri application.
 pub fn run() {
     tauri::Builder::default()
@@ -70,15 +158,33 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(invoke_handler())
         .setup(|app| {
-            let settings = tauri::Manager::path(app)
+            let settings = app
+                .path()
                 .app_config_dir()
                 .expect("the app config directory should be known")
                 .join(state::SETTINGS_FILE);
-            tauri::Manager::manage(app, state::AppState::load(settings));
+            let state = state::AppState::load(settings);
+            let saved = state.initial_window();
+            app.manage(state);
+
+            // 位置を戻すのは 1 回だけ。中身を描く前に済ませる
+            if let Some(main) = window::main_window(app.handle()) {
+                window::restore(&main, saved);
+            }
+            tray::install(app.handle())?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to start the Tauri application");
+        .on_window_event(on_window_event)
+        .build(tauri::generate_context!())
+        .expect("failed to start the Tauri application")
+        .run(|app, event| match event {
+            // Dock のアイコンと、2 個目の起動から戻ってくる。
+            // macOS は同じ bundle id の `.app` を二重に起動しない
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => window::show_main(app),
+            tauri::RunEvent::Exit => shut_down(app),
+            _ => {}
+        });
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use tokio::sync::Mutex;
 
+use crate::model::WindowState;
 use crate::queue::GitQueue;
 use crate::store::{Registry, RepoPath, UnknownRepo};
 
@@ -20,6 +21,14 @@ pub struct AppState {
     /// (docs/adr/0016-store-without-plugin.md)。
     settings: Mutex<Result<Registry, String>>,
     queue: GitQueue,
+    /// Geometry read at startup. 復元は `setup` で 1 回だけ行う。
+    initial_window: Option<WindowState>,
+    /// Latest geometry after the user moved or resized the window.
+    ///
+    /// **ここに控えるだけで書き込まない。** `Moved` / `Resized` はドラッグ中に
+    /// 何十回も来るので、そのたびに設定ファイルを書くと丸ごと書き直しになる。
+    /// 書き出すのは隠したときと終了するとき (docs/adr/0011-residency.md)。
+    moved_window: std::sync::Mutex<Option<WindowState>>,
 }
 
 /// Why the state could not answer.
@@ -65,11 +74,47 @@ impl AppState {
             // 起動時の唯一の出力先。フロントにも同じ理由を返す
             eprintln!("canopy: {reason}");
         }
+        let initial_window = settings.as_ref().ok().and_then(Registry::window);
         Self {
             settings_path,
             settings: Mutex::new(settings),
             queue: GitQueue::default(),
+            initial_window,
+            moved_window: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Where the window was when the app last exited.
+    pub fn initial_window(&self) -> Option<WindowState> {
+        self.initial_window
+    }
+
+    /// Remember where the window is now. **設定ファイルには書かない。**
+    pub fn record_window(&self, window: WindowState) {
+        *self.moved() = Some(window);
+    }
+
+    /// Write the remembered geometry. 動いていなければ何もしない。
+    ///
+    /// **失敗したら控えを残す。** 消すと、書けなかった位置が次の機会にも
+    /// 保存されない。
+    pub async fn save_window(&self) -> Result<(), StateError> {
+        let Some(window) = *self.moved() else {
+            return Ok(());
+        };
+        self.write(|registry| registry.set_window(window)).await?;
+        // 待っている間に動いていたら、その値を残す
+        let mut moved = self.moved();
+        if *moved == Some(window) {
+            *moved = None;
+        }
+        Ok(())
+    }
+
+    fn moved(&self) -> std::sync::MutexGuard<'_, Option<WindowState>> {
+        self.moved_window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn queue(&self) -> &GitQueue {
@@ -129,6 +174,93 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn geometry(x: f64, y: f64, width: f64, height: f64) -> WindowState {
+        WindowState {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// 設定ファイルから読んだウィンドウの位置とサイズを返す。
+    /// 復元は `setup` が 1 回だけ使う (docs/adr/0011-residency.md)
+    #[tokio::test]
+    async fn reads_the_window_geometry_at_startup() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let settings = directory.path().join("canopy.json");
+        let before = AppState::load(settings.clone());
+        before.record_window(geometry(120.0, 80.0, 1180.0, 760.0));
+        before.save_window().await.expect("save should succeed");
+
+        let after = AppState::load(settings);
+
+        assert_eq!(
+            after.initial_window(),
+            Some(geometry(120.0, 80.0, 1180.0, 760.0))
+        );
+    }
+
+    /// 保存する前は設定ファイルに書かれていない。
+    /// **`Moved` はドラッグ中に何十回も来る**ので、そのたびには書かない
+    #[tokio::test]
+    async fn does_not_write_the_geometry_until_it_is_saved() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let settings = directory.path().join("canopy.json");
+        let state = AppState::load(settings.clone());
+
+        state.record_window(geometry(120.0, 80.0, 1180.0, 760.0));
+
+        assert!(!settings.exists(), "控えただけで書き込んでいる");
+    }
+
+    /// 動いていなければ書かない。書き込めない場所でも成功する
+    #[tokio::test]
+    async fn does_not_write_when_the_window_has_not_moved() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let state = AppState::load(directory.path().join("canopy.json"));
+        state.record_window(geometry(120.0, 80.0, 1180.0, 760.0));
+        state.save_window().await.expect("the first save writes");
+
+        // 以降の保存が本当に書いていないなら、書けない場所でも成功する
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500))
+            .expect("make read-only");
+        let again = state.save_window().await;
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("restore permissions");
+
+        assert!(again.is_ok(), "動いていないのに書き込んでいる");
+    }
+
+    /// 保存に失敗したら控えを残す。次の機会に書けるようにする
+    #[tokio::test]
+    async fn keeps_the_geometry_when_saving_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let locked = directory.path().join("locked");
+        std::fs::create_dir(&locked).expect("create dir");
+        let settings = locked.join("canopy.json");
+        let state = AppState::load(settings.clone());
+        state.record_window(geometry(120.0, 80.0, 1180.0, 760.0));
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))
+            .expect("make read-only");
+
+        let failed = state.save_window().await;
+
+        assert!(failed.is_err(), "書けないのに成功している");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))
+            .expect("restore permissions");
+        state.save_window().await.expect("the retry writes");
+        assert_eq!(
+            AppState::load(settings).initial_window(),
+            Some(geometry(120.0, 80.0, 1180.0, 760.0)),
+            "控えが捨てられている"
+        );
+    }
 
     /// 保存に失敗したらメモリ上の変更も戻す。
     /// 戻さないと画面と設定ファイルが恒久的にずれる

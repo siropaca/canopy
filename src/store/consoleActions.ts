@@ -20,7 +20,10 @@ import { useUiStore } from "./useUiStore";
  * タブがまだ 1 つも無いときは、次の出力が最初のタブになるので「見えている」。
  */
 export function isConsoleShowing(repoId: RepoId): boolean {
-  if (!useUiStore.getState().consoleOpen) return false;
+  const ui = useUiStore.getState();
+  // **隠れているウィンドウの中身は見えていない。** 閉じたあとに届いた失敗にも
+  // 赤いドットを立てる (docs/adr/0011-residency.md)
+  if (!ui.windowVisible || !ui.consoleOpen) return false;
   const active = useConsoleStore.getState().activeTab;
   return active === null || active === repoId;
 }
@@ -30,6 +33,22 @@ export function showConsoleFor(repoId: RepoId): void {
   useUiStore.getState().setConsoleOpen(true);
   // 開いた時点で赤いドットは消える (docs/specs/ui.md の「コンソール」)
   useConsoleStore.getState().openTab(repoId);
+}
+
+/**
+ * ウィンドウが画面に出たか隠れたかを受ける。
+ *
+ * **出たら、見えているタブの赤いドットを消す。** 隠している間に届いた失敗には
+ * 印が付くが、戻ってきた時点でその出力は見えている。パネルを開いたときと同じ扱い
+ * (docs/specs/ui.md の「コンソール」)。
+ */
+export function noteWindowVisible(visible: boolean): void {
+  const ui = useUiStore.getState();
+  if (ui.windowVisible === visible) return;
+  ui.setWindowVisible(visible);
+  if (!visible || !ui.consoleOpen) return;
+  const console = useConsoleStore.getState();
+  if (console.activeTab !== null) console.openTab(console.activeTab);
 }
 
 /**

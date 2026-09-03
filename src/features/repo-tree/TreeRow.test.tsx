@@ -187,6 +187,18 @@ describe("リポジトリ見出し", () => {
 
     expect(renderRow(rows[0]!).element.textContent).toBe("acme-apidetached: v1.0.0");
   });
+
+  it("リベース中は元のブランチ名を見出しに出す (detached とは別に出す)", () => {
+    const repo = makeRepo("r1", { head: { kind: "rebasing", name: "topic" } });
+    const rows = flatten([repo], {
+      expanded: new Set(["r1|repo|"]),
+      query: "",
+      groupDirectories: true,
+      localOnly: false,
+    });
+
+    expect(renderRow(rows[0]!).element.textContent).toBe("acme-apiリベース中: topic");
+  });
 });
 
 describe("見出しを薄くする / 選択を塗る", () => {

@@ -127,6 +127,12 @@ pub async fn build_snapshot(
     })
 }
 
+/// Directories git creates while a rebase is in progress.
+///
+/// `merge` はいまの既定のバックエンド、`apply` は `--apply` を指定したとき
+/// (`git rebase` の man)。どちらも `head-name` に元のブランチが入る。
+const REBASE_DIRS: [&str; 2] = ["rebase-merge", "rebase-apply"];
+
 /// Read HEAD. detached なら参照名 (タグ名か短縮ハッシュ) を持たせる
 /// (docs/specs/data-model.md)。
 async fn read_head(dir: &RepoPath) -> Result<Head, GitError> {
@@ -134,6 +140,12 @@ async fn read_head(dir: &RepoPath) -> Result<Head, GitError> {
     let current = current.trim();
     if !current.is_empty() {
         return Ok(Head::branch(current));
+    }
+
+    // **rebase の途中を detached と混ぜない。** git はどちらも HEAD を detach するが、
+    // 見せ方が違う (docs/specs/ui.md の「リベース中」)
+    if let Some(branch) = read_rebase_branch(dir).await? {
+        return Ok(Head::rebasing(branch));
     }
 
     // detached。タグを指しているならタグ名を出す
@@ -145,6 +157,45 @@ async fn read_head(dir: &RepoPath) -> Result<Head, GitError> {
 
     let hash = run_ok(dir, &["rev-parse", "--short", "HEAD"]).await?;
     Ok(Head::detached(hash.trim()))
+}
+
+/// What git writes to `head-name` when the rebase started from a detached HEAD.
+///
+/// **ブランチ名ではない。** そのまま使うと「detached HEAD という名前のブランチを
+/// リベース中」に見える (実測)。
+const DETACHED_HEAD_NAME: &str = "detached HEAD";
+
+/// The branch a rebase started from, if one is stopped here.
+///
+/// **場所は git に聞く。** `.git` はワークツリーごとに別の場所を指すので、
+/// パスを組み立てると別のワークツリーの rebase を拾う。
+///
+/// detached HEAD から始めた rebase は `None`。その場合は detached として出す。
+async fn read_rebase_branch(dir: &RepoPath) -> Result<Option<String>, GitError> {
+    for name in REBASE_DIRS {
+        let path = run_ok(dir, &["rev-parse", "--git-path", name]).await?;
+        let head_name = dir.as_path().join(path.trim()).join("head-name");
+        let Ok(raw) = std::fs::read_to_string(head_name) else {
+            continue;
+        };
+        if let Some(branch) = rebase_branch_of(&raw) {
+            return Ok(Some(branch.to_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// Read `head-name`'s contents as a branch name.
+///
+/// `refs/heads/topic` の形で入っている。detached HEAD から始めた rebase は
+/// ブランチを持たないので `None`。
+fn rebase_branch_of(raw: &str) -> Option<&str> {
+    let name = raw.trim();
+    if name.is_empty() || name == DETACHED_HEAD_NAME {
+        return None;
+    }
+    let branch = name.trim_start_matches("refs/heads/");
+    (!branch.is_empty()).then_some(branch)
 }
 
 /// `origin` の URL。origin が無いリポジトリもあるので、失敗は None にする。
@@ -208,4 +259,34 @@ fn read_fetched_at(common_dir: &Path) -> Option<i64> {
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .ok()?;
     i64::try_from(since_epoch.as_millis()).ok()
+}
+
+#[cfg(test)]
+mod rebase_tests {
+    use super::rebase_branch_of;
+
+    /// `refs/heads/` を落としてブランチ名にする
+    #[test]
+    fn reads_the_branch_a_rebase_started_from() {
+        assert_eq!(rebase_branch_of("refs/heads/topic\n"), Some("topic"));
+        assert_eq!(
+            rebase_branch_of("refs/heads/feature/x\n"),
+            Some("feature/x")
+        );
+    }
+
+    /// **detached HEAD から始めた rebase はブランチを持たない。**
+    /// git はそれでも `head-name` を書き、中身が文字列 `detached HEAD` になる (実測)
+    #[test]
+    fn refuses_the_placeholder_git_writes_for_a_detached_head() {
+        assert_eq!(rebase_branch_of("detached HEAD\n"), None);
+    }
+
+    /// 空の `head-name` もブランチではない
+    #[test]
+    fn refuses_an_empty_head_name() {
+        assert_eq!(rebase_branch_of(""), None);
+        assert_eq!(rebase_branch_of("  \n"), None);
+        assert_eq!(rebase_branch_of("refs/heads/"), None);
+    }
 }

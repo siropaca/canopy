@@ -26,7 +26,6 @@ const DEFAULT_UI: UiState = {
   expanded: [],
   pane_width: 360,
   console_open: false,
-  window: null,
   group_directories: true,
   local_only: false,
 };

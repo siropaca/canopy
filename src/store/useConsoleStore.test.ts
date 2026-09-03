@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { consoleTabs, useConsoleStore } from "./useConsoleStore";
+import { CONSOLE_BLOCK_LIMIT, ELIDED_ID } from "@/shared/lib/consoleLog";
+
+import { consoleTabs, createConsoleStore, useConsoleStore } from "./useConsoleStore";
 
 /*
  * コンソールのタブと出力。
@@ -141,5 +143,43 @@ describe("コンソールのタブ", () => {
     expect(consoleTabs(state())).toEqual(["r2"]);
     expect(state().failed.has("r1")).toBe(false);
     expect(state().activeTab).toBe("r2");
+  });
+});
+
+describe("出力の上限", () => {
+  /**
+   * タブを閉じるまで積み上がると、長く使うほど重くなる。
+   * **黙って捨てず**に、落とした件数を先頭のブロックで伝える
+   * (docs/specs/ui.md の「コンソール」)
+   */
+  it("上限を超えたら古い方から落として、印を 1 つ残す", () => {
+    const store = createConsoleStore();
+    for (let index = 0; index < CONSOLE_BLOCK_LIMIT + 10; index += 1) {
+      store.getState().append("r1", [{ lines: [{ kind: "command", text: `git ${index}` }] }], {
+        failed: false,
+      });
+    }
+
+    const blocks = store.getState().blocks.get("r1") ?? [];
+
+    expect(blocks).toHaveLength(CONSOLE_BLOCK_LIMIT);
+    expect(blocks[0]?.id).toBe(ELIDED_ID);
+    expect(blocks[0]?.lines[0]?.text).toBe("古い出力 11 件を省略しました");
+    // 残っているのは新しい方
+    expect(blocks.at(-1)?.lines[0]?.text).toBe(`git ${CONSOLE_BLOCK_LIMIT + 9}`);
+  });
+
+  it("上限までは何も落とさない", () => {
+    const store = createConsoleStore();
+    for (let index = 0; index < CONSOLE_BLOCK_LIMIT; index += 1) {
+      store.getState().append("r1", [{ lines: [{ kind: "command", text: `git ${index}` }] }], {
+        failed: false,
+      });
+    }
+
+    const blocks = store.getState().blocks.get("r1") ?? [];
+
+    expect(blocks).toHaveLength(CONSOLE_BLOCK_LIMIT);
+    expect(blocks.every((block) => block.id !== ELIDED_ID)).toBe(true);
   });
 });

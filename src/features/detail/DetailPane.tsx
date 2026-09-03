@@ -6,6 +6,7 @@ import { useNow } from "@/shared/hooks/useNow";
 import { changesForBranch, worktreeName } from "@/shared/lib/branchView";
 import { FILE_LIMIT } from "@/shared/lib/changeList";
 import { classNames } from "@/shared/lib/classNames";
+import { headSummary } from "@/shared/lib/headLabel";
 import { formatRelativeTime } from "@/shared/lib/relativeTime";
 import {
   canCheckout,
@@ -151,8 +152,8 @@ interface RepositoryDetailProps {
 
 function RepositoryDetail({ row, snapshot, actions }: RepositoryDetailProps) {
   const totals = repoTotals(snapshot);
-  const current =
-    snapshot.head.kind === "branch" ? snapshot.head.name : `detached (${snapshot.head.name})`;
+  // 文言は shared/lib/headLabel.ts の 1 本。ツリーの見出しと言い方を揃える
+  const current = headSummary(snapshot.head);
 
   return (
     <>

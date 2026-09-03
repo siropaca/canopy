@@ -4,12 +4,14 @@ import type { CommandResult } from "@/ipc/generated/CommandResult";
 import type { CommandStep } from "@/ipc/generated/CommandStep";
 
 import {
+  BULK_FETCH_IDLE_LIMIT_MS,
   cancelBulkFetch,
   recordBulkResult,
   recordResult,
   retargetBulkFetch,
   startBulkFetch,
 } from "./results";
+import { applyRepoUpdate } from "./events";
 import { bulkFetchRunning, useBulkFetchStore } from "./useBulkFetchStore";
 import { useConsoleStore } from "./useConsoleStore";
 import { useRepoStore } from "./useRepoStore";
@@ -60,7 +62,8 @@ beforeEach(() => {
   });
   useToastStore.getState().clear();
   useBulkFetchStore.getState().reset();
-  useUiStore.setState({ consoleOpen: false });
+  useRepoStore.setState({ running: new Map() });
+  useUiStore.setState({ consoleOpen: false, windowVisible: true });
 });
 
 afterEach(() => {
@@ -259,5 +262,203 @@ describe("一括フェッチ", () => {
     retargetBulkFetch(["r1"]);
 
     expect(toasts()[0]?.text).toBe("1 リポジトリをフェッチしました");
+  });
+});
+
+function runningOf(repoId: string): boolean {
+  return (useRepoStore.getState().running.get(repoId) ?? 0) > 0;
+}
+
+describe("結果が届かない一括フェッチ", () => {
+  /**
+   * イベントは全リポジトリぶん飛ぶ前提だが、購読が切れるとその前提が崩れる。
+   * 1 件でも届かないと「実行中」が解けず、フェッチのボタンが再起動まで無効になる
+   * (docs/plans/phase-4-polish.md からの持ち越し)
+   */
+  /**
+   * **短くすると誤検知する。** フェッチは同じリポジトリの書き込みロックを待つので、
+   * プル (締め切り 600 秒) の後ろに付くとその間ずっと無音になる。
+   * `src-tauri/src/op_kind.rs` の 600 秒 + 30 秒に合わせてある
+   */
+  it("猶予は 630 秒 (プルの締め切り 600 秒 + フェッチの 30 秒)", () => {
+    expect(BULK_FETCH_IDLE_LIMIT_MS).toBe(630_000);
+  });
+
+  it("届かないまま猶予を過ぎたら、実行中の印を外して 1 件のトーストを出す", () => {
+    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r2");
+    startBulkFetch(["r1", "r2"]);
+    recordBulkResult("r1", ran([step()]));
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+
+    expect(runningOf("r2")).toBe(false);
+    expect(bulkFetchRunning(useBulkFetchStore.getState())).toBe(false);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0]?.kind).toBe("failure");
+    expect(toasts()[0]?.text).toBe("2 リポジトリをフェッチしました (結果が届かない 1)");
+  });
+
+  /** **投げた時点から見張る。** 1 件目が届いてから始めると、購読が最初から
+   * 切れているときに永久に待つことになる */
+  it("1 件も届かないまま猶予を過ぎても畳む", () => {
+    useRepoStore.getState().beginRun("r1");
+    startBulkFetch(["r1"]);
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+
+    expect(runningOf("r1")).toBe(false);
+    expect(toasts()[0]?.text).toBe("1 リポジトリをフェッチしました (結果が届かない 1)");
+  });
+
+  it("届いたリポジトリの実行中は触らない", () => {
+    // 届いた分の印は `applyRepoUpdate` が外す。ここで二重に外さない
+    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r2");
+    startBulkFetch(["r1", "r2"]);
+    recordBulkResult("r1", ran([step()]));
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+
+    expect(runningOf("r1")).toBe(true);
+  });
+
+  it("失敗と届かない分は両方まとめて出す", () => {
+    startBulkFetch(["r1", "r2"]);
+    recordBulkResult("r1", ran([step({ code: 1 })], { ok: false }));
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+
+    expect(toasts()[0]?.text).toBe("2 リポジトリをフェッチしました (失敗 1, 結果が届かない 1)");
+  });
+
+  /** **1 件届くたびに数え直す。** リポジトリの数だけ時間がかかる操作なので */
+  it("結果が届くたびに猶予を数え直す", () => {
+    startBulkFetch(["r1", "r2"]);
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS - 1);
+    recordBulkResult("r1", ran([step()]));
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS - 1);
+
+    // 数え直していなければ、ここで畳まれている
+    expect(bulkFetchRunning(useBulkFetchStore.getState())).toBe(true);
+    expect(toasts()).toHaveLength(0);
+  });
+
+  it("全件そろったら見張りは消える", () => {
+    startBulkFetch(["r1", "r2"]);
+    recordBulkResult("r1", ran([step()]));
+    recordBulkResult("r2", ran([step()]));
+    expect(toasts()).toHaveLength(1);
+
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS * 2);
+
+    // 集約した 1 件だけ。畳んだトーストが後から増えない
+    expect(toasts().filter((toast) => toast.kind === "failure")).toHaveLength(0);
+  });
+
+  /**
+   * **待っていないのにタイマーを残さない。** 常駐して使うので、
+   * 一括フェッチのたびに空振りの見張りが積まれると 60 秒ごとに起き続ける
+   */
+  it("投げられなかったら見張りのタイマーごと消える", () => {
+    startBulkFetch(["r1", "r2"]);
+
+    cancelBulkFetch();
+
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS * 2);
+    expect(toasts()).toHaveLength(0);
+  });
+
+  it("全件そろったら見張りのタイマーごと消える", () => {
+    startBulkFetch(["r1", "r2"]);
+    recordBulkResult("r1", ran([step()]));
+    recordBulkResult("r2", ran([step()]));
+    // 集約したトーストのタイマーは別枠なので落としてから数える
+    useToastStore.getState().clear();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("畳んだあとに遅れて届いた結果", () => {
+  /**
+   * 畳んだ時点で実行中を 1 本外している。もう一度外すと、その時点で
+   * **別の操作が握っている 1 本**を消す (docs/specs/ui.md の「実行中の扱い」)
+   */
+  it("実行中の印を二重に外さない", () => {
+    useRepoStore.getState().beginRun("r1");
+    startBulkFetch(["r1"]);
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+    expect(runningOf("r1")).toBe(false);
+    // 畳んだあとに別の操作が始まる
+    useRepoStore.getState().beginRun("r1");
+
+    // 遅れて一括フェッチの結果が届く
+    applyRepoUpdate({
+      repo_id: "r1",
+      outcome: { snapshot: null, snapshot_error: null, result: ran([step()]) },
+      error: null,
+    });
+
+    expect(runningOf("r1")).toBe(true);
+  });
+
+  /**
+   * 11 件遅れて届くと上限 6 を超えて、直前に出した集約のトーストごと押し出される
+   * (docs/specs/ui.md の「トースト」)
+   */
+  it("リポジトリごとのトーストを出さない", () => {
+    startBulkFetch(["r1", "r2"]);
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+    useToastStore.getState().clear();
+
+    recordBulkResult("r1", ran([step()]));
+    recordBulkResult("r2", ran([step()]));
+
+    expect(toasts()).toHaveLength(0);
+    // コンソールには残る
+    expect(blocksOf("r1")).toHaveLength(1);
+  });
+
+  /**
+   * **覚えを次の一括フェッチに持ち越さない。**
+   * 持ち越すと、次に届いた結果で実行中が外れず、そのリポジトリの操作系が
+   * 再起動まで無効のままになる
+   */
+  it("次の一括フェッチの結果では実行中が外れる", () => {
+    // 1 回目: 届かないまま畳む
+    useRepoStore.getState().beginRun("r1");
+    startBulkFetch(["r1"]);
+    vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
+    useToastStore.getState().clear();
+
+    // 2 回目: 今度は結果が届く
+    useRepoStore.getState().beginRun("r1");
+    startBulkFetch(["r1"]);
+    applyRepoUpdate({
+      repo_id: "r1",
+      outcome: { snapshot: null, snapshot_error: null, result: ran([step()]) },
+      error: null,
+    });
+
+    expect(runningOf("r1")).toBe(false);
+    expect(toasts()[0]?.text).toBe("1 リポジトリをフェッチしました");
+  });
+});
+
+describe("リストから消したリポジトリの結果", () => {
+  /**
+   * 一括フェッチの最中に消すと、あとから届いた結果で名前の引けないタブが
+   * 復活する (docs/specs/ui.md の「コンソール」)
+   */
+  it("コンソールのタブを作り直さない", () => {
+    startBulkFetch(["r1"]);
+    useRepoStore.getState().remove("r1");
+
+    recordBulkResult("r1", ran([step()]));
+
+    expect(blocksOf("r1")).toHaveLength(0);
   });
 });

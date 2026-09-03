@@ -282,6 +282,96 @@ async fn reads_a_detached_head_at_a_tag() {
     assert!(snapshot.local.iter().all(|branch| !branch.is_current));
 }
 
+/// rebase がコンフリクトで止まっているリポジトリは、detached ではなく
+/// 「リベース中」として出す。**元のブランチ名を持たせる**
+/// (docs/specs/ui.md の「リベース中」)
+#[tokio::test]
+async fn reads_a_head_stopped_in_a_rebase() {
+    let fixture = Fixture::new().await;
+    fixture.stop_in_a_conflicted_rebase().await;
+
+    let snapshot = fixture.snapshot().await;
+
+    assert_eq!(snapshot.head.kind, HeadKind::Rebasing);
+    assert_eq!(snapshot.head.name, "topic");
+    // 現在ブランチはどれでもない。git は rebase 中の HEAD を detach する
+    assert!(snapshot.local.iter().all(|branch| !branch.is_current));
+}
+
+/// detached HEAD から始めた rebase は detached として出す。
+///
+/// **git は `head-name` を省略せず、文字列 `detached HEAD` を書く** (実測)。
+/// そのまま使うと「detached HEAD という名前のブランチ」に見える
+#[tokio::test]
+async fn reads_a_detached_head_stopped_in_a_rebase_as_detached() {
+    let fixture = Fixture::new().await;
+    fixture.stop_in_a_conflicted_rebase_while_detached().await;
+
+    let snapshot = fixture.snapshot().await;
+
+    assert_eq!(snapshot.head.kind, HeadKind::Detached);
+    assert_ne!(snapshot.head.name, "detached HEAD");
+    assert!(
+        snapshot.head.name.len() >= 7 && snapshot.head.name.chars().all(|c| c.is_ascii_hexdigit()),
+        "短縮ハッシュではない: {}",
+        snapshot.head.name
+    );
+}
+
+/// 別のワークツリーで止まっている rebase を、登録したリポジトリのものと混ぜない。
+///
+/// `.git` の場所はワークツリーごとに違う。パスを組み立てると隣の rebase を拾う
+#[tokio::test]
+async fn ignores_a_rebase_stopped_in_another_worktree() {
+    let fixture = Fixture::new().await;
+    let worktree = fixture.root().join("wt");
+    fixture.work_git(&["switch", "-c", "dev/side"]).await;
+    fixture.write("conflict.txt", "base\n");
+    fixture.work_git(&["add", "conflict.txt"]).await;
+    fixture.work_git(&["commit", "-m", "base"]).await;
+    fixture.work_git(&["switch", "main"]).await;
+    fixture
+        .work_git(&[
+            "worktree",
+            "add",
+            worktree.to_str().expect("path"),
+            "dev/side",
+        ])
+        .await;
+    // 隣のワークツリーだけを rebase の途中で止める
+    fixture.write_in(&worktree, "conflict.txt", "side\n");
+    fixture.git(&worktree, &["commit", "-am", "side"]).await;
+    fixture.write("conflict.txt", "main\n");
+    fixture.work_git(&["add", "conflict.txt"]).await;
+    fixture.work_git(&["commit", "-m", "main-side"]).await;
+    let stopped = tokio::process::Command::new("git")
+        .args(["rebase", "main"])
+        .current_dir(&worktree)
+        .env("LC_ALL", "C")
+        .output()
+        .await
+        .expect("git rebase should start");
+    assert!(!stopped.status.success(), "隣の rebase が止まっていない");
+
+    let snapshot = fixture.snapshot().await;
+
+    assert_eq!(snapshot.head.kind, HeadKind::Branch);
+    assert_eq!(snapshot.head.name, "main");
+}
+
+/// rebase を中断すれば元のブランチに戻る。**止まっている間だけ**の状態
+#[tokio::test]
+async fn reads_a_branch_again_after_the_rebase_is_aborted() {
+    let fixture = Fixture::new().await;
+    fixture.stop_in_a_conflicted_rebase().await;
+    fixture.work_git(&["rebase", "--abort"]).await;
+
+    let snapshot = fixture.snapshot().await;
+
+    assert_eq!(snapshot.head.kind, HeadKind::Branch);
+    assert_eq!(snapshot.head.name, "topic");
+}
+
 /// タグを指していない detached HEAD は短縮ハッシュを出す
 #[tokio::test]
 async fn reads_a_detached_head_without_a_tag() {

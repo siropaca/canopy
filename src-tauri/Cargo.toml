@@ -18,14 +18,21 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+# tray-icon はメニューバーのアイコン。閉じても終了しないので復帰の手段が要る
+# (docs/adr/0011-residency.md)
+tauri = { version = "2", features = ["tray-icon"] }
 # フォルダ選択ダイアログ。パスをフロントに渡さずに追加するため Rust 側から開く
 # (docs/specs/git-operations.md の add_repo)
 tauri-plugin-dialog = "2"
+# プロセスグループを作って、孫まで畳む (docs/adr/0020-process-group-kill.md)。
+# tokio が推移的に持っているので、Cargo.lock に増えるクレートは無い
+libc = "0.2"
 # 子プロセスと排他。同期の Command を使わない (docs/adr/0009-concurrency-and-refresh.md)。
 # macros は try_join! に要る。dev-dependencies だけに書くと、cargo test では通って
-# 本体のビルドだけが落ちる (docs/pitfalls.md)
-tokio = { version = "1", features = ["macros", "process", "sync", "time"] }
+# 本体のビルドだけが落ちる (docs/pitfalls.md)。
+# io-util は打ち切っても出力を残すために自分でパイプを読むのに要る
+# (process だけでは入らない)
+tokio = { version = "1", features = ["io-util", "macros", "process", "sync", "time"] }
 # Rust の struct から TypeScript の型を生成する (docs/adr/0013-type-generation.md)
 ts-rs = "12"
 

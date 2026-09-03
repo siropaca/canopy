@@ -10,7 +10,10 @@ const LIB_RS = fileURLToPath(new URL("../../src-tauri/src/lib.rs", import.meta.u
 const COMMAND_RS = ["settings", "snapshot", "ops"].map((name) =>
   fileURLToPath(new URL(`../../src-tauri/src/commands/${name}.rs`, import.meta.url)),
 );
-const OPS_RS = fileURLToPath(new URL("../../src-tauri/src/commands/ops.rs", import.meta.url));
+/** イベント名の定数を置いているファイル。増やしたらここに足す */
+const EVENT_RS = ["commands/ops.rs"].map((name) =>
+  fileURLToPath(new URL(`../../src-tauri/src/${name}`, import.meta.url)),
+);
 /** invoke を呼んでいるラッパ */
 const WRAPPERS_TS = ["repos", "ops"].map((name) =>
   fileURLToPath(new URL(`./${name}.ts`, import.meta.url)),
@@ -164,7 +167,7 @@ describe("コマンドの名前", () => {
 
 describe("イベントの名前", () => {
   it("購読する名前が Rust の emit する名前と一致する", () => {
-    const emitted = readEventNames(readFileSync(OPS_RS, "utf8"));
+    const emitted = readEventNames(read(EVENT_RS));
 
     for (const name of Object.values(EVENTS)) {
       expect(emitted, `${name} を emit している定数が無い`).toContain(name);

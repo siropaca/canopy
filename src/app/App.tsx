@@ -16,7 +16,7 @@ import { canFetch, canPull, canRemoveRepo } from "@/shared/lib/selection";
 import { Splitter } from "@/shared/ui/Splitter";
 import { addRepository, loadEverything, removeRepository } from "@/store/bootstrap";
 import { toggleConsolePanel } from "@/store/consoleActions";
-import { listenForRepoUpdates } from "@/store/events";
+import { listenForRepoUpdates, watchWindowVisibility } from "@/store/events";
 import { notifyFailure } from "@/store/notify";
 import {
   checkoutAndPullRow,
@@ -73,11 +73,17 @@ export function App() {
     };
   }, []);
 
+  // ウィンドウを閉じてもプロセスは残る。隠れている間に届いた失敗にも
+  // 赤いドットを立てるため、可視性を追う (docs/adr/0011-residency.md)
+  useEffect(() => watchWindowVisibility(), []);
+
   const rows = useTreeRows();
   // **画面に見えている**選択だけを詳細ペインとサイドバーに渡す
   const selectedRow = useSelectedRow(rows);
-  const paneWidth = useUiStore((state) => state.paneWidth);
+  // **幅は購読しない。** 購読すると pointermove ごとに画面全体が作り直される。
+  // 幅を使うのはツリーペインだけで、そちらが自分で購読している
   const setPaneWidth = useUiStore((state) => state.setPaneWidth);
+  const readPaneWidth = useCallback(() => useUiStore.getState().paneWidth, []);
   const toggleGroupDirectories = useUiStore((state) => state.toggleGroupDirectories);
   const toggleLocalOnly = useUiStore((state) => state.toggleLocalOnly);
   const toggles = useUiStore(
@@ -170,7 +176,7 @@ export function App() {
         <TreePane>
           <RepoTree rows={rows} onActivate={actions.activate} onContextMenu={actions.openMenu} />
         </TreePane>
-        <Splitter width={paneWidth} onWidth={setPaneWidth} />
+        <Splitter widthAt={readPaneWidth} onWidth={setPaneWidth} />
         <DetailPane row={selectedRow} actions={detailActions} />
       </div>
       <ConsolePanel />

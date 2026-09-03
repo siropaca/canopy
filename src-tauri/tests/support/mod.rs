@@ -83,6 +83,58 @@ impl Fixture {
         String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
+    /// Run git and allow a non-zero exit. コンフリクトで止める操作に使う。
+    pub async fn try_work_git(&self, args: &[&str]) -> bool {
+        tokio::process::Command::new("git")
+            .args(args)
+            .current_dir(&self.work)
+            .env("LC_ALL", "C")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_AUTHOR_DATE", "2026-08-01T10:00:00+09:00")
+            .env("GIT_COMMITTER_DATE", "2026-08-01T10:00:00+09:00")
+            .output()
+            .await
+            .unwrap_or_else(|error| panic!("git {args:?} should start: {error}"))
+            .status
+            .success()
+    }
+
+    /// Leave the clone stopped in the middle of a conflicted rebase.
+    ///
+    /// `topic` と `main` が同じファイルを別々に変えた状態で `git rebase main` する。
+    pub async fn stop_in_a_conflicted_rebase(&self) {
+        self.write("conflict.txt", "base\n");
+        self.work_git(&["add", "conflict.txt"]).await;
+        self.work_git(&["commit", "-m", "base"]).await;
+        self.work_git(&["checkout", "-b", "topic"]).await;
+        self.write("conflict.txt", "topic\n");
+        self.work_git(&["commit", "-am", "topic"]).await;
+        self.work_git(&["checkout", "main"]).await;
+        self.write("conflict.txt", "main\n");
+        self.work_git(&["commit", "-am", "main"]).await;
+        self.work_git(&["checkout", "topic"]).await;
+        let ok = self.try_work_git(&["rebase", "main"]).await;
+        assert!(!ok, "rebase がコンフリクトで止まっていない");
+    }
+
+    /// Leave a **detached HEAD** stopped in the middle of a conflicted rebase.
+    ///
+    /// git はこのとき `head-name` に文字列 `detached HEAD` を書く (実測)。
+    /// ブランチ名として扱ってはいけない。
+    pub async fn stop_in_a_conflicted_rebase_while_detached(&self) {
+        self.write("conflict.txt", "base\n");
+        self.work_git(&["add", "conflict.txt"]).await;
+        self.work_git(&["commit", "-m", "base"]).await;
+        self.write("conflict.txt", "main\n");
+        self.work_git(&["commit", "-am", "main"]).await;
+        self.work_git(&["checkout", "--detach", "HEAD~1"]).await;
+        self.write("conflict.txt", "detached\n");
+        self.work_git(&["commit", "-am", "detached"]).await;
+        let ok = self.try_work_git(&["rebase", "main"]).await;
+        assert!(!ok, "rebase がコンフリクトで止まっていない");
+    }
+
     /// Run git in the clone.
     pub async fn work_git(&self, args: &[&str]) -> String {
         self.git(&self.work.clone(), args).await

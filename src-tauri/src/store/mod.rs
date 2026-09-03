@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{RepoRegistration, UiState};
+use crate::model::{RepoRegistration, UiState, WindowState};
 
 pub use repo_path::RepoPath;
 
@@ -56,6 +56,13 @@ pub struct Registry {
     /// 既存の設定ファイルが「壊れている」と判定される。
     #[serde(default = "default_terminal_app")]
     terminal_app: String,
+    /// Position and size of the window (docs/adr/0011-residency.md).
+    ///
+    /// **`ui_state` の中には置かない。** `ui_state` はフロントと共有する DTO で、
+    /// ウィンドウの位置は Rust 側しか知らない。混ぜると「フロントが送っても
+    /// 捨てられるフィールド」になる。
+    #[serde(default)]
+    window: Option<WindowState>,
 }
 
 impl Default for Registry {
@@ -66,6 +73,7 @@ impl Default for Registry {
             repos: Vec::new(),
             ui_state: UiState::default(),
             terminal_app: default_terminal_app(),
+            window: None,
         }
     }
 }
@@ -301,11 +309,100 @@ impl Registry {
         self.ui_state = ui_state;
         self.prune();
     }
+
+    /// Where the window was when the app last exited.
+    pub fn window(&self) -> Option<WindowState> {
+        self.window
+    }
+
+    /// Replace the window's position and size.
+    pub fn set_window(&mut self, window: WindowState) {
+        self.window = Some(window);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn geometry(x: f64, y: f64, width: f64, height: f64) -> WindowState {
+        WindowState {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// フロントが送る UI 状態でウィンドウの位置は動かない。
+    ///
+    /// **`ui_state` の外に置いてある。** 中に混ぜると、フロントが読み込んだ時点の
+    /// 値を送り返したときに、動かしたあとの位置が古い値に戻る
+    /// (docs/adr/0011-residency.md)
+    #[test]
+    fn keeps_the_window_geometry_when_the_ui_state_is_replaced() {
+        let (mut registry, id) = registry_with_one();
+        registry.set_window(geometry(120.0, 80.0, 1180.0, 760.0));
+
+        registry.set_ui_state(UiState {
+            repo_order: vec![id],
+            pane_width: 420,
+            ..UiState::default()
+        });
+
+        assert_eq!(
+            registry.window(),
+            Some(geometry(120.0, 80.0, 1180.0, 760.0))
+        );
+    }
+
+    /// ウィンドウを差し替えても UI 状態は残る
+    #[test]
+    fn set_window_leaves_the_ui_state_alone() {
+        let (mut registry, id) = registry_with_one();
+        registry.set_ui_state(UiState {
+            repo_order: vec![id.clone()],
+            expanded: vec![format!("{id}|repo|")],
+            pane_width: 420,
+            console_open: true,
+            ..UiState::default()
+        });
+
+        registry.set_window(geometry(120.0, 80.0, 1180.0, 760.0));
+
+        let ui_state = registry.ui_state();
+        assert_eq!(ui_state.expanded, vec![format!("{id}|repo|")]);
+        assert_eq!(ui_state.pane_width, 420);
+        assert!(ui_state.console_open);
+        assert_eq!(
+            registry.window(),
+            Some(geometry(120.0, 80.0, 1180.0, 760.0))
+        );
+    }
+
+    /// 前の版が `ui_state` の中に書いたウィンドウの位置は読み捨てる。
+    /// **登録したリポジトリごと読めなくならないこと**が要件
+    /// (docs/adr/0016-store-without-plugin.md)
+    #[test]
+    fn reads_a_settings_file_that_kept_the_window_inside_the_ui_state() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("canopy.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"next_id":2,"repos":[{"id":"r1","name":"acme-api",
+               "path":"/repos/acme-api","common_dir":"/repos/acme-api/.git"}],
+               "ui_state":{"repo_order":["r1"],"expanded":[],"pane_width":420,
+               "console_open":true,"window":{"x":1,"y":2,"width":3,"height":4},
+               "group_directories":true,"local_only":false}}"#,
+        )
+        .expect("write");
+
+        let registry = Registry::load(&path).expect("old settings still load");
+
+        assert_eq!(registry.registrations().len(), 1);
+        assert_eq!(registry.ui_state().pane_width, 420);
+        assert_eq!(registry.window(), None);
+    }
 
     fn registry_with_one() -> (Registry, String) {
         let mut registry = Registry::default();
@@ -531,7 +628,7 @@ mod tests {
         assert!(ui_state.group_directories);
         assert!(!ui_state.local_only);
         assert!(!ui_state.console_open);
-        assert_eq!(ui_state.window, None);
+        assert_eq!(loaded.window(), None);
         // `repo_order` が無い設定でも、登録済みのリポジトリは画面に出る
         assert_eq!(ui_state.repo_order, vec!["r1".to_owned()]);
         assert_eq!(loaded.registrations().len(), 1);

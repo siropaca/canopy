@@ -8,6 +8,7 @@
 //! この中だけで使う。外へ出すのは読み取りの `run_ok` だけ
 //! (docs/adr/0017-typed-git-arguments.md)。
 
+mod children;
 mod message;
 pub mod parse;
 mod run;
@@ -16,6 +17,7 @@ mod snapshot;
 mod validate;
 mod write;
 
+pub use children::kill_running_children;
 pub use message::describe;
 pub use run::{GitError, run_ok};
 pub use secret::mask_credentials;

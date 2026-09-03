@@ -16,7 +16,6 @@ const SAVED: UiState = {
   expanded: ["r1|repo|", "r1|local|"],
   pane_width: 420,
   console_open: true,
-  window: null,
   group_directories: false,
   local_only: true,
 };
@@ -143,7 +142,6 @@ describe("toUiState", () => {
       expanded: ["r1|local|", "r1|repo|"],
       pane_width: 420,
       console_open: true,
-      window: null,
       group_directories: false,
       local_only: true,
     });
@@ -154,5 +152,42 @@ describe("toUiState", () => {
     store.getState().setExpanded(["r2|repo|", "r1|repo|"]);
 
     expect(toUiState(store.getState(), []).expanded).toEqual(["r1|repo|", "r2|repo|"]);
+  });
+});
+
+describe("ウィンドウの可視性", () => {
+  it("起動した時点では見えている", () => {
+    expect(createUiStore().getState().windowVisible).toBe(true);
+  });
+
+  it("隠されたら false、戻されたら true", () => {
+    const store = createUiStore();
+
+    store.getState().setWindowVisible(false);
+    expect(store.getState().windowVisible).toBe(false);
+
+    store.getState().setWindowVisible(true);
+    expect(store.getState().windowVisible).toBe(true);
+  });
+
+  /** 保存する対象ではない。次の起動では必ず見えている状態から始まる */
+  it("読み込みで書き換わらない", () => {
+    const store = createUiStore();
+    store.getState().setWindowVisible(false);
+
+    store.getState().hydrate(SAVED);
+
+    expect(store.getState().windowVisible).toBe(false);
+  });
+
+  /**
+   * ウィンドウの位置とサイズを持っているのは Rust 側 (docs/adr/0011-residency.md)。
+   * フロントと共有する形に混ぜると、読み込んだ値を送り返したときに
+   * 動かしたあとの位置を古い値で上書きする
+   */
+  it("保存する形にウィンドウの位置が入っていない", () => {
+    const store = createUiStore();
+
+    expect(toUiState(store.getState(), ["r1"])).not.toHaveProperty("window");
   });
 });

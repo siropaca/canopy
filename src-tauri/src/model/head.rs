@@ -1,18 +1,23 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Whether HEAD points at a branch or is detached.
+/// Whether HEAD points at a branch, is detached, or is parked by a rebase.
 ///
 /// タグのチェックアウトが v1 に入っているので detached は必ず起きる
 /// (docs/specs/data-model.md)。
+///
+/// **rebase の途中は detached と分ける。** git はどちらも HEAD を detach するが、
+/// 「タグを見ている」と「作業が途中で止まっている」では次にすべきことが違う
+/// (docs/specs/ui.md の「リベース中」)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-// 値はデータモデルの表どおり `"branch" | "detached"`。
+// 値はデータモデルの表どおり `"branch" | "detached" | "rebasing"`。
 // フィールド名ではなく列挙子なので rename_all を使う (docs/adr/0013-type-generation.md)
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum HeadKind {
     Branch,
     Detached,
+    Rebasing,
 }
 
 /// State of HEAD in the registered worktree.
@@ -38,6 +43,14 @@ impl Head {
             name: name.into(),
         }
     }
+
+    /// Stopped in the middle of a rebase. `name` は rebase を始めたブランチ。
+    pub fn rebasing(name: impl Into<String>) -> Self {
+        Self {
+            kind: HeadKind::Rebasing,
+            name: name.into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -50,7 +63,7 @@ mod tests {
         assert_serde_keys_match_ts(&Head::branch("main"));
     }
 
-    /// `kind` は小文字の 2 値。TypeScript の型と実行時の値がずれると
+    /// `kind` は小文字の 3 値。TypeScript の型と実行時の値がずれると
     /// フロントの分岐が黙って全部 false になる。
     #[test]
     fn serializes_the_kind_in_lower_case() {
@@ -62,14 +75,19 @@ mod tests {
             serde_json::to_value(Head::detached("v1.0.0")).expect("Head should serialize"),
             serde_json::json!({ "kind": "detached", "name": "v1.0.0" })
         );
+        assert_eq!(
+            serde_json::to_value(Head::rebasing("topic")).expect("Head should serialize"),
+            serde_json::json!({ "kind": "rebasing", "name": "topic" })
+        );
     }
 
-    /// 生成した TypeScript も同じ 2 値を宣言している
+    /// 生成した TypeScript も同じ 3 値を宣言している
     #[test]
-    fn ts_declaration_lists_both_kinds() {
+    fn ts_declaration_lists_every_kind() {
         let declaration = <HeadKind as ts_rs::TS>::decl(&ts_rs::Config::default());
 
         assert!(declaration.contains("\"branch\""), "{declaration}");
         assert!(declaration.contains("\"detached\""), "{declaration}");
+        assert!(declaration.contains("\"rebasing\""), "{declaration}");
     }
 }

@@ -25,6 +25,48 @@ export interface ConsoleBlock {
 /** 積み上げたブロック。鍵はストアが振る (`store/useConsoleStore.ts`) */
 export interface IdentifiedBlock extends ConsoleBlock {
   readonly id: string;
+  /** 省略したブロックの件数。**省略の印そのものにだけ入る** */
+  readonly elided?: number;
+}
+
+/**
+ * タブ 1 枚が持てるブロック数。
+ *
+ * 1 操作が 1〜2 ブロックなので、500 は 1 日使い続けても届かない量
+ * (docs/specs/ui.md の「コンソール」)。
+ */
+export const CONSOLE_BLOCK_LIMIT = 500;
+
+/** 省略の印の鍵。タブの中で 1 つだけ */
+export const ELIDED_ID = "elided";
+
+/**
+ * 上限を超えた古いブロックを落とす。
+ *
+ * **黙って捨てない。** 落とした件数を先頭の 1 ブロックにまとめて出す。
+ * 印そのものも 1 枠に数えるので、返る長さは必ず `limit` 以下。
+ */
+export function capBlocks(
+  blocks: readonly IdentifiedBlock[],
+  limit: number = CONSOLE_BLOCK_LIMIT,
+): IdentifiedBlock[] {
+  if (blocks.length <= limit) return [...blocks];
+  const alreadyElided = blocks.find((block) => block.id === ELIDED_ID)?.elided ?? 0;
+  const output = blocks.filter((block) => block.id !== ELIDED_ID);
+  // **印の 1 枠を引いた残りを保つ。** `slice(-0)` は `slice(0)` と同じで全件になるので、
+  // 上限 1 以下のときは 1 件も残さない
+  const room = Math.max(0, limit - 1);
+  const kept = room === 0 ? [] : output.slice(-room);
+  return [elidedBlock(alreadyElided + output.length - kept.length), ...kept];
+}
+
+/** 省略した件数を伝える 1 ブロック */
+function elidedBlock(count: number): IdentifiedBlock {
+  return {
+    id: ELIDED_ID,
+    elided: count,
+    lines: [{ kind: "output", text: `古い出力 ${count} 件を省略しました` }],
+  };
 }
 
 /** 仮想リストに渡す 1 行。鍵はブロックの id と行番号から作る */
