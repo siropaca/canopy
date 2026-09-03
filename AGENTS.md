@@ -70,9 +70,10 @@ docs に書いていないことがあれば、それは調査して docs に書
 | 場所 | 何をしているか |
 | --- | --- |
 | `scripts/check-docs.py` | ドキュメントの整合性を検査する。検出する項目は [docs/workflow.md](docs/workflow.md) の「直したあとの波及確認」 |
+| `docs/pitfalls.md` の節 | 踏んだ層ごとに分ける (UI / Rust の子プロセス / git の呼び出し / ツールチェイン / エージェントの運用)。**読む人が見る節に置く。** Rust の話を UI の節に書くと二度踏む |
 | `scripts/check-generated.sh` | コミットした TypeScript の型が、いまの Rust の struct と一致しているかを検出する |
 | `eslint.config.js` | 生の HTML を差し込む書き方と、層をまたぐ import を error にしている。[docs/architecture.md](docs/architecture.md) の依存の向きを機械で縛る |
-| 突き合わせのテスト | 2 つの情報源がずれたら落ちるようにしてある。トークン (`tokens.test.ts`)、CSS Modules のクラス名 (`css-modules.test.ts`)、コマンド名と引数名とイベント名 (`ipc/commands.test.ts`)、未コミット一覧の件数 (`shared/lib/changeList.test.ts`)、インデントの段数 (`repo-tree/depth.test.ts`) |
+| 突き合わせのテスト | 2 つの情報源がずれたら落ちるようにしてある。トークン (`tokens.test.ts`)、CSS Modules のクラス名 (`css-modules.test.ts`)、**モックと実装の CSS** (`mock-css.test.ts`)、コマンド名と引数名とイベント名 (`ipc/commands.test.ts`)、未コミット一覧の件数 (`shared/lib/changeList.test.ts`)、インデントの段数 (`repo-tree/depth.test.ts`)、ウィンドウの下限とラベル (`src-tauri/src/window.rs`) |
 | `.github/workflows/check.yml` | main への push と PR で `pnpm check` を回す |
 | `.claude/settings.json` | `git add -A` などの危険なコマンドを拒否。読み取り系コマンドは許可して確認を減らしている |
 | `.claude/skills/phase-review/` | フェーズ完了時のレビュー手順 |

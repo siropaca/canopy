@@ -50,7 +50,7 @@ git の状態をフロントで再計算しない。
 | `changes` | `ChangeList` | メインのワークツリーの未コミット変更 |
 | `fetched_at` | `timestamp?` | 最後に fetch が成功した時刻 |
 | `revision` | `number` | このリポジトリのスナップショットの世代。単調増加。古いものを捨てるために使う |
-| `head` | `Head` | HEAD の状態。ブランチか detached か |
+| `head` | `Head` | HEAD の状態。ブランチか detached か、rebase の途中か |
 
 ## Branch
 
@@ -80,12 +80,18 @@ git の状態をフロントで再計算しない。
 
 | フィールド | 型 | 意味 |
 | --- | --- | --- |
-| `kind` | `"branch" \| "detached"` | |
-| `name` | `string` | ブランチ名、または detached のときの参照 (タグ名や短縮ハッシュ) |
+| `kind` | `"branch" \| "detached" \| "rebasing"` | |
+| `name` | `string` | ブランチ名、detached のときの参照 (タグ名や短縮ハッシュ)、rebase を始めたブランチ名 |
 
 タグのチェックアウトは v1 に入っているので、**detached HEAD は必ず起きる。**  
 このとき `Branch.is_current` は全ブランチ false になる。  
 表示の扱いは [ui.md](ui.md) を参照。
+
+**rebase の途中は detached と分ける。**  
+git はどちらも HEAD を detach するが、「タグを見ている」と「作業が途中で止まっている」では次にすべきことが違う。  
+`rebasing` の判定は `rebase-merge` / `rebase-apply` の `head-name` を読む。  
+**detached HEAD から始めた rebase は `detached` として出す。**  
+git はこのとき `head-name` を省略せず、中身に文字列 `detached HEAD` を書く (実測)。ブランチ名として扱わない。
 
 ## Ref
 
@@ -229,9 +235,13 @@ git を 1 回実行した記録。コンソールの 1 ブロックに対応す�
 | `expanded` | **開いている**ノードのキー |
 | `pane_width` | ツリーペインの幅 |
 | `console_open` | コンソールの開閉 |
-| `window` | ウィンドウの位置とサイズ。常駐するので復元する ([../adr/0011-residency.md](../adr/0011-residency.md)) |
 | `group_directories` | ディレクトリのグループ化 |
 | `local_only` | ローカルのみ表示 |
+
+**ウィンドウの位置とサイズは `UiState` に入れない。**  
+`UiState` はフロントと共有する DTO で、位置とサイズを知っているのは Rust 側だけ ([../adr/0011-residency.md](../adr/0011-residency.md))。  
+混ぜると「フロントが送っても捨てられるフィールド」になり、フロントからウィンドウを動かす機能を足したときに無言で効かなくなる。  
+設定ファイルでは `ui_state` と並びの `window` に置く (`terminal_app` と同じ扱い)。
 
 保存するのは「開いているキー」にする。折りたたんでいるキーではない。
 

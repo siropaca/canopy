@@ -213,6 +213,73 @@ Markdown の表にヘッダーだけ列を足して行を埋め忘れると、�
 
 ADR を破棄・置き換えするときは、**その ADR にしか書かれていない定義が無いか**を確認して、生きている場所へ移す。
 
+### メニューバーのアイコンが出ないことがある
+
+macOS 26 は入り切らないステータス項目を `•••` に畳む。  
+畳まれた項目は**画面に出ないので、作られていないのと見分けが付かない。**
+
+アクセシビリティで位置を見ると分かる。畳まれていると x が大きな負の値になる。
+
+```sh
+osascript -e 'tell application "System Events" to tell process "canopy" \
+  to get {position, size, title} of menu bar item 1 of menu bar 2'
+```
+
+実測: Canopy `-9822` / Claude `-4126` / ChatGPT `-9739` (どれも畳まれている)、
+見えている BetterDisplay は `1018`。  
+`menu bar 2` に項目があれば、アイコンそのものは作られている。
+
+### ウィンドウの初期位置を OS に任せると画面の外に出る
+
+`tauri.conf.json` に位置を書かないと、macOS の既定の置き方に任されて
+**ウィンドウの上端がメニューバーの 977px 上**に来た (実測。毎回同じ位置)。
+起動しても画面に何も出ないので、アプリが動いていないように見える。
+
+`"center": true` を書いて中央に出す。保存した位置を戻すのはそのあとなので、
+復元と両立する。
+
+### Tauri のウィンドウはアクセシビリティに出てこない
+
+`count of windows` が 0 を返す。System Events からウィンドウを掴めないので、
+`Fill` / `Center` / `Close Window` のメニュー項目を押しても**何も起きない。**
+押せた見た目になるので、動いたと勘違いする。
+
+ウィンドウを動かす確認は、アプリ自身に `set_size` / `set_position` / `close` を
+呼ばせる足場を一時的に置いて行う。ログは stderr に出す。
+
+なお `setup` の直後に `geometry()` を読み戻しても古い値が返る。  
+位置と寸法の反映は非同期なので、**その場で確かめられない。** 数秒後に読む。
+
+## Rust の子プロセス
+
+### 非同期関数の中に大きなバッファを置くとスタックが溢れる
+
+パイプを読むために `let mut chunk = [0u8; 8 * 1024]` とスタックに置いたら、
+その future を `try_join!` で 7 本並べたスナップショット取得で
+`has overflowed its stack` と出て `SIGABRT` で落ちた (実測。統合テストで再現)。
+
+async fn のローカル変数は future の中に入る。  
+デバッグビルドは future が太るので、並べた時点で 2MB のスレッドスタックを超える。  
+**バッファはヒープに置く** (`vec![0u8; N]`)。
+
+### `kill` したあと `wait` するまでゾンビが「生きている」と答える
+
+`kill(pid, 0)` はゾンビにも 0 を返す。直の子は `Child::wait` で回収するまで
+消えないので、この判定では kill が効いていないように見える。
+
+直の子の生死は `Child::wait` / `try_wait` で見る。  
+`kill(pid, 0)` が使えるのは `Child` を持っていない孫だけ。
+
+**撃った直後の `try_wait` でも判定できない。** シグナルが届いて終わるまでに間があるので、
+「生きている」は `timeout(短い時間, child.wait())` が**返らないこと**で見る。
+
+### プロセスグループを撃つと親の終了コードが安定しない
+
+`killpg` は全員に SIGKILL を送るが、孫が先に死ぬと親 (`sh`) の `wait` が返って
+**自分で 0 を返して終わる**ことがある。親の終了コードを縛るとテストが落ちる (実測で 4 割)。
+
+畳めたことは「`sleep 30` が終わる前に返ったこと」で見る。
+
 ## git の呼び出し
 
 ### 出力形式は固定する
@@ -404,6 +471,12 @@ src-tauri/target/release/bundle/macos/Canopy.app/Contents/MacOS/canopy
 `src/test/css-modules.test.ts` は `styles[...]` の形を「動的な参照」として弾く。  
 **コメントに書いた例も拾う**ので、`styles[kind] は使わない` と説明を書くと落ちる。  
 説明では記号を使わずに書く。
+
+### macOS に `timeout` コマンドは無い
+
+`timeout 300 cargo test ...` は `command not found` になる。  
+出力を grep していると**空振りが「落ちなかった」に見える。**  
+coreutils の `gtimeout` を使うか、`Bash` の `timeout` 引数で待つ。
 
 ### mise が入れた Rust には rustfmt と clippy が付いてこない
 

@@ -33,6 +33,7 @@ BANNED = [
     ("git diff --exit-code", "生成物の検査は scripts/check-generated.sh の一時ディレクトリ比較に変えた"),
     ("std::process::Command", "子プロセスは `tokio::process::Command`"),
     ("列数の不一致を見ていない", "check_tables() が検出する"),
+    ("空行で割れた表を見ていない", "check_orphan_table_rows() が検出する"),
     ("CSP で無効になる書き方を書けなく", "React の style prop は CSSOM 経由なので CSP では止まらない"),
     ("fetch origin <名前>:<名前>", "リモートは追跡先から取る。origin 決め打ちだと別のブランチの中身で上書きする"),
     ("--force-with-lease=<名前>:<sha>", "リースの参照名はリモート側のブランチ名。`<名前>` だと origin/main 形と混ざる"),
@@ -156,6 +157,41 @@ def check_tables():
                 header = None
 
 
+def check_orphan_table_rows():
+    """区切り行を持たない表の行を見つける。
+
+    表の途中に空行を入れると、そこで表が終わって残りの行はただの文字列になる。
+    見た目には「行が減った表」になり、check_tables() の列数チェックは通る。
+    実際にやった (フェーズ 4 の `UiState`)。
+    """
+    for path in md_files():
+        header = None
+        fenced = False
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            if not stripped.startswith("|"):
+                header = None
+                continue
+            if set(stripped) <= set("|-: "):
+                header = True
+                continue
+            if header is None:
+                # 区切り行の 1 行前はヘッダーなので、次の行を見て決める
+                header = False
+                first = i
+                continue
+            if header is False:
+                problems.append(
+                    f"表の区切り行が無い  {rel(path)}:{first} 空行で表が切れている可能性がある"
+                )
+                header = None
+
+
 # 表に出るファイル。ここに特定製品の名前を書かない (AGENTS.md の「書き方」)。
 # 設計の根拠として docs/ に書くのは構わない
 PUBLIC_FILES = ["README.md", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"]
@@ -203,6 +239,7 @@ def main():
     check_adr_index()
     check_superseded_refs()
     check_tables()
+    check_orphan_table_rows()
     check_public_surface()
     check_banned()
     if problems:

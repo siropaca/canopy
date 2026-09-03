@@ -57,14 +57,16 @@ canopy/
 │   │   ├── main.rs             エントリ。lib の run() を呼ぶだけ
 │   │   ├── lib.rs              Tauri の Builder。統合テストからも呼べるように lib にしている
 │   │   ├── commands/           #[tauri::command] の定義 (settings / snapshot / ops)
-│   │   ├── git/                コマンド組み立て、実行、パース、引数の型付けと検証
+│   │   ├── git/                コマンド組み立て、実行、パース、引数の型付けと検証、子プロセスの後始末
 │   │   ├── model/              serde の DTO
 │   │   ├── store/              設定の読み書き、id → パスの解決
 │   │   ├── queue/              同時実行の上限、リポジトリごとのロック、世代の採番
 │   │   ├── op_kind.rs          操作の種別。git と queue の両方が見る
 │   │   ├── ops.rs              操作の合成 (locate → ロック → 実行 → 取り直し)
 │   │   ├── os.rs               Finder とターミナルを開く (`open`)
-│   │   └── state.rs            コマンドが共有する状態 (設定・キュー)
+│   │   ├── state.rs            コマンドが共有する状態 (設定・キュー・ウィンドウ)
+│   │   ├── tray.rs             メニューバーのアイコンとメニュー
+│   │   └── window.rs           ウィンドウの位置とサイズ、隠す / 戻す
 │   ├── capabilities/           Tauri の権限 (docs/security.md)
 │   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
 │   ├── tauri.conf.json         ウィンドウ、CSP、バンドルの設定
@@ -153,6 +155,8 @@ git の実態と画面がずれる方が、少し待つより困る。
 - 一括フェッチの同時実行上限は全体の上限より小さくして、対話操作の枠を空ける
 - **ネットワークの枠はロックを取る前に確保する。** ロックを持って枠を待つと、一括フェッチ中に同じリポジトリのチェックアウトが待たされる
 - 一括フェッチの結果は `repo_snapshot_updated` イベントで返ってきた順に流す
+- **子プロセスはグループごと畳む。** 締め切りとアプリ終了で `killpg` する。直の子だけを殺すと孫の `ssh` が残る
+  ([adr/0020-process-group-kill.md](adr/0020-process-group-kill.md))
 
 詳細は [adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md)。
 
