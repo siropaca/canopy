@@ -79,6 +79,19 @@ export function bulkFetchRunning(state: BulkFetchStoreState): boolean {
   return state.targets.size > 0 && state.done.size < state.targets.size;
 }
 
+/**
+ * 進み具合。走っていなければ `null`。
+ *
+ * **走っているかの判定は `bulkFetchRunning` の 1 本を通す。** 同じ式を表示側で
+ * 書き直すと、判定を変えたときに片方だけ古くなる (ボタンは無効なのに
+ * ステータスバーには何も出ない、など)。
+ */
+export function bulkFetchProgress(
+  state: BulkFetchStoreState,
+): { readonly total: number; readonly done: number } | null {
+  return bulkFetchRunning(state) ? { total: state.targets.size, done: state.done.size } : null;
+}
+
 /** 全件そろったか。集約したトーストを出す合図 */
 export function bulkFetchSettled(state: BulkFetchStoreState): boolean {
   return state.targets.size > 0 && state.done.size >= state.targets.size;

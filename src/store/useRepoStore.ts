@@ -3,6 +3,7 @@ import { create, type StateCreator } from "zustand";
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
 import type { RepoSnapshot } from "@/ipc/generated/RepoSnapshot";
 import type { RepoId, RepoState } from "@/ipc/types";
+import type { Activity } from "@/shared/lib/activity";
 
 /*
  * リポジトリの状態。
@@ -25,16 +26,30 @@ export interface RepoStoreState {
   /** 設定ファイルが読めなかったときの理由 */
   readonly loadError: string | null;
   /**
-   * リポジトリごとの実行中の本数。**「実行中」の正はここだけ。**
+   * リポジトリごとに走っている書き込みの列。**「実行中」の正はここだけ。**
    *
-   * 数えるのは、一括フェッチとユーザーの操作が重なったときに、
+   * 列にするのは、一括フェッチとユーザーの操作が重なったときに、
    * 真偽値だと先に終わった方が実行中の表示を消してしまうため。
+   * **中身の操作はステータスバーの文言に使う**
+   * (docs/adr/0023-progress-in-the-status-bar.md)。
    *
-   * `RepoState.running` はこの本数から `orderedRepos` が写す。
+   * `RepoState.running` はこの列から `orderedRepos` が写す。
    * `byId` の側を手で同期すると、`RepoState` を作り直す経路を足すたびに
    * 写し忘れが増える。
    */
-  readonly running: ReadonlyMap<RepoId, number>;
+  readonly running: ReadonlyMap<RepoId, readonly Activity[]>;
+  /**
+   * 取り直しの最中のリポジトリ。
+   *
+   * **`running` とは分ける。** 取り直しは `.git` の変化のたびに走るので
+   * (docs/adr/0022-auto-refresh.md)、混ぜるとボタンが頻繁に無効になる。
+   * 使うのはステータスバーの文言と、読み取りの重複排除だけ。
+   *
+   * **入るのは「更新」の 3 つの引き金から走った読み取りだけ** (`store/refresh.ts`)。
+   * 起動時の全件読み込みと、追加した直後の読み込みは入らない。そちらは
+   * 見出しの `読み込み中` で見せている (docs/specs/ui.md の「読み込み中とエラー」)。
+   */
+  readonly reading: ReadonlySet<RepoId>;
 
   /** 起動時。見出しを全件すぐ描くために登録情報だけ入れる */
   registerAll: (repos: readonly RepoRegistration[]) => void;
@@ -48,9 +63,17 @@ export interface RepoStoreState {
   setOrder: (order: readonly RepoId[]) => void;
   setLoadError: (error: string | null) => void;
   /** 操作を始めた。そのリポジトリの操作系 UI を無効にする */
-  beginRun: (repoId: RepoId) => void;
-  /** 操作が終わった。最後の 1 本が終わったときだけ無効化を解く */
-  endRun: (repoId: RepoId) => void;
+  beginRun: (repoId: RepoId, activity: Activity) => void;
+  /**
+   * 操作が終わった。最後の 1 本が終わったときだけ無効化を解く。
+   *
+   * **終わった操作を名指しで渡す。** 末尾を抜くと、種別の違う 2 本が重なったときに
+   * 残る側がずれて、ステータスバーが走っていない操作を出す。
+   */
+  endRun: (repoId: RepoId, activity: Activity) => void;
+  /** 取り直しを始めた。**無効化はしない** */
+  beginRead: (repoId: RepoId) => void;
+  endRead: (repoId: RepoId) => void;
 }
 
 const creator: StateCreator<RepoStoreState> = (set) => ({
@@ -59,6 +82,7 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
   loaded: false,
   loadError: null,
   running: new Map(),
+  reading: new Set(),
 
   registerAll: (repos) =>
     set(() => ({
@@ -112,7 +136,9 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
       // 消したリポジトリの実行中を残さない。残すと操作系が永久に無効になる
       const running = new Map(state.running);
       running.delete(repoId);
-      return { byId, order: state.order.filter((id) => id !== repoId), running };
+      const reading = new Set(state.reading);
+      reading.delete(repoId);
+      return { byId, order: state.order.filter((id) => id !== repoId), running, reading };
     }),
 
   setOrder: (order) =>
@@ -127,26 +153,42 @@ const creator: StateCreator<RepoStoreState> = (set) => ({
   // 読めなかったのも「読み終えた」。待ち続けさせない
   setLoadError: (error) => set(() => ({ loadError: error, loaded: true })),
 
-  beginRun: (repoId) => set((state) => ({ running: shifted(state.running, repoId, 1) })),
+  beginRun: (repoId, activity) =>
+    set((state) => {
+      const next = new Map(state.running);
+      next.set(repoId, [...(state.running.get(repoId) ?? []), activity]);
+      return { running: next };
+    }),
 
-  endRun: (repoId) => set((state) => ({ running: shifted(state.running, repoId, -1) })),
+  endRun: (repoId, activity) =>
+    set((state) => {
+      const kinds = state.running.get(repoId);
+      if (kinds === undefined) return {};
+      // **終わった 1 本を名指しで抜く。** 同じ種別が 2 本あれば後から始めた方
+      const at = kinds.lastIndexOf(activity);
+      if (at === -1) return {};
+      const next = new Map(state.running);
+      const rest = [...kinds.slice(0, at), ...kinds.slice(at + 1)];
+      // 空になった id は残さない
+      if (rest.length === 0) next.delete(repoId);
+      else next.set(repoId, rest);
+      return { running: next };
+    }),
+
+  beginRead: (repoId) =>
+    set((state) => {
+      if (state.reading.has(repoId)) return {};
+      return { reading: new Set(state.reading).add(repoId) };
+    }),
+
+  endRead: (repoId) =>
+    set((state) => {
+      if (!state.reading.has(repoId)) return {};
+      const next = new Set(state.reading);
+      next.delete(repoId);
+      return { reading: next };
+    }),
 });
-
-/** 実行中の本数を動かす。0 になった id は残さない */
-function shifted(
-  running: ReadonlyMap<RepoId, number>,
-  repoId: RepoId,
-  delta: number,
-): ReadonlyMap<RepoId, number> {
-  const next = new Map(running);
-  const after = Math.max(0, (running.get(repoId) ?? 0) + delta);
-  if (after === 0) {
-    next.delete(repoId);
-  } else {
-    next.set(repoId, after);
-  }
-  return next;
-}
 
 function toLoading(repo: RepoRegistration): RepoState {
   return {
@@ -189,7 +231,7 @@ function withRunning(repo: RepoState, running: boolean): RepoState {
  * 判断して読みに行く、という食い違いになる。
  */
 export function isRunning(state: RepoStoreState, repoId: RepoId): boolean {
-  return (state.running.get(repoId) ?? 0) > 0;
+  return (state.running.get(repoId) ?? []).length > 0;
 }
 
 /**

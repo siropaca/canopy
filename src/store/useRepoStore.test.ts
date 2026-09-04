@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
 import { makeSnapshot } from "@/test/factories";
 
-import { createRepoStore, orderedRepos, type RepoStoreState } from "./useRepoStore";
+import { createRepoStore, isRunning, orderedRepos, type RepoStoreState } from "./useRepoStore";
 
 function registration(id: string, name: string): RepoRegistration {
   return { id, name, path: `/repos/${name}` };
@@ -137,6 +137,50 @@ describe("リポジトリのストア", () => {
     expect(state().order).toEqual(["r1"]);
   });
 
+  /*
+   * 取り直しの最中 (docs/adr/0023-progress-in-the-status-bar.md)。
+   *
+   * **`running` とは分ける。** `.git` の変化で頻繁に走るので、混ぜると
+   * ボタンがそのたびに無効になる (docs/adr/0022-auto-refresh.md)。
+   */
+  describe("取り直しの最中", () => {
+    beforeEach(() => {
+      state().registerAll([registration("r1", "a"), registration("r2", "b")]);
+    });
+
+    it("始めたリポジトリだけ入る。終わると抜ける", () => {
+      state().beginRead("r1");
+
+      expect([...state().reading]).toEqual(["r1"]);
+
+      state().endRead("r1");
+      expect([...state().reading]).toEqual([]);
+    });
+
+    /** **ボタンを無効にしない。** ここが効くと `.git` の変化のたびに灰色になる */
+    it("実行中の印は付かない", () => {
+      state().beginRead("r1");
+
+      expect(isRunning(state(), "r1")).toBe(false);
+      expect(orderedRepos(state()).find((repo) => repo.id === "r1")?.running).toBe(false);
+    });
+
+    it("同じ id を 2 回始めても 1 件", () => {
+      state().beginRead("r1");
+      state().beginRead("r1");
+
+      expect([...state().reading]).toEqual(["r1"]);
+    });
+
+    it("リストから消したら取り直しの最中も外す", () => {
+      state().beginRead("r1");
+
+      state().remove("r1");
+
+      expect([...state().reading]).toEqual([]);
+    });
+  });
+
   describe("実行中", () => {
     /** 実行中は本数が正で、`orderedRepos` が写す */
     const runningOf = (id: string): boolean | undefined =>
@@ -147,15 +191,15 @@ describe("リポジトリのストア", () => {
     });
 
     it("始めたリポジトリだけ実行中になる", () => {
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
 
       expect(runningOf("r1")).toBe(true);
       expect(runningOf("r2")).toBe(false);
     });
 
     it("終わったら解ける", () => {
-      state().beginRun("r1");
-      state().endRun("r1");
+      state().beginRun("r1", "fetch");
+      state().endRun("r1", "fetch");
 
       expect(runningOf("r1")).toBe(false);
     });
@@ -165,23 +209,70 @@ describe("リポジトリのストア", () => {
      * 先に終わった方が実行中の表示を消してしまう
      */
     it("2 本重なったら、両方終わるまで解けない", () => {
-      state().beginRun("r1");
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
+      state().beginRun("r1", "fetch");
 
-      state().endRun("r1");
+      state().endRun("r1", "fetch");
       expect(runningOf("r1")).toBe(true);
 
-      state().endRun("r1");
+      state().endRun("r1", "fetch");
       expect(runningOf("r1")).toBe(false);
     });
 
+    /** ステータスバーが読む (docs/adr/0023-progress-in-the-status-bar.md) */
+    it("何をしているかを覚えている", () => {
+      state().beginRun("r1", "push");
+      state().beginRun("r1", "fetch");
+
+      expect(state().running.get("r1")).toEqual(["push", "fetch"]);
+
+      state().endRun("r1", "push");
+      expect(state().running.get("r1"), "終わった 1 本だけ抜く").toEqual(["fetch"]);
+
+      state().endRun("r1", "fetch");
+      expect(state().running.has("r1"), "空の列を残さない").toBe(false);
+    });
+
+    /**
+     * **先に始めた方が先に終わるとは限らない。** 末尾を抜くと、残る側が
+     * 走っていない操作を指してステータスバーがそれを出す
+     */
+    it("終わった操作を名指しで抜く。順番が入れ替わってもずれない", () => {
+      state().beginRun("r1", "push");
+      state().beginRun("r1", "fetch");
+
+      // 後から始めたフェッチではなく、先に始めたプッシュが終わる
+      state().endRun("r1", "push");
+
+      expect(state().running.get("r1")).toEqual(["fetch"]);
+    });
+
+    it("同じ操作が 2 本あれば 1 本だけ抜く", () => {
+      state().beginRun("r1", "fetch");
+      state().beginRun("r1", "fetch");
+
+      state().endRun("r1", "fetch");
+
+      expect(state().running.get("r1")).toEqual(["fetch"]);
+    });
+
+    /** 走っていない操作を渡されても、他の 1 本を巻き込まない */
+    it("走っていない操作の終了は何もしない", () => {
+      state().beginRun("r1", "push");
+
+      state().endRun("r1", "fetch");
+
+      expect(state().running.get("r1")).toEqual(["push"]);
+      expect(runningOf("r1")).toBe(true);
+    });
+
     it("余分に終了しても負にならない", () => {
-      state().endRun("r1");
-      state().endRun("r1");
-      state().beginRun("r1");
+      state().endRun("r1", "fetch");
+      state().endRun("r1", "fetch");
+      state().beginRun("r1", "fetch");
 
       expect(runningOf("r1")).toBe(true);
-      state().endRun("r1");
+      state().endRun("r1", "fetch");
       expect(runningOf("r1")).toBe(false);
     });
 
@@ -190,7 +281,7 @@ describe("リポジトリのストア", () => {
      * 手で写す形だと、経路を足すたびに写し忘れが増える
      */
     it("スナップショットが届いても、登録し直しても実行中のまま", () => {
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
 
       state().applySnapshot(makeSnapshot({ id: "r1", revision: 2 }));
       expect(runningOf("r1")).toBe(true);
@@ -218,7 +309,7 @@ describe("リポジトリのストア", () => {
      */
     it("実行中でも、状態が変わっていなければ同じオブジェクトを返す", () => {
       state().registerAll([registration("r1", "a")]);
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
 
       const before = orderedRepos(state());
       const after = orderedRepos(state());
@@ -231,9 +322,9 @@ describe("リポジトリのストア", () => {
       state().registerAll([registration("r1", "a")]);
       const idle = orderedRepos(state());
 
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
       const running = orderedRepos(state());
-      state().endRun("r1");
+      state().endRun("r1", "fetch");
 
       expect(running[0]).not.toBe(idle[0]);
       expect(orderedRepos(state())[0]).toBe(idle[0]);
@@ -243,7 +334,7 @@ describe("リポジトリのストア", () => {
   describe("リストからの削除", () => {
     it("実行中の印も消す", () => {
       state().registerAll([registration("r1", "a")]);
-      state().beginRun("r1");
+      state().beginRun("r1", "fetch");
 
       state().remove("r1");
 

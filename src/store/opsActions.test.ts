@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpOutcome } from "@/ipc/generated/OpOutcome";
 import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
 import type { RowNode } from "@/ipc/types";
+import type { Activity } from "@/shared/lib/activity";
 import { flatten } from "@/shared/lib/flattenTree";
 import { allKeysOf } from "@/shared/lib/treeKeys";
 import {
@@ -32,6 +33,7 @@ import {
   fetchRepository,
   loadPushPreview,
   openRepositoryInTerminal,
+  deleteBranch,
   pullRow,
   pushBranch,
   renameBranch,
@@ -101,6 +103,7 @@ describe("操作の実行", () => {
       loaded: false,
       loadError: null,
       running: new Map(),
+      reading: new Set(),
     });
     useRepoStore.getState().registerAll([registration("r1", "acme-api")]);
     useConsoleStore.setState({
@@ -433,5 +436,132 @@ describe("操作の実行", () => {
     expect(lastToast()?.text).toBe("フェッチしました");
     expect(loggedBlocks("r1")).toHaveLength(1);
     expect(runningOf("r1")).toBe(false);
+  });
+});
+
+/*
+ * ステータスバーに出す操作の種別 (docs/adr/0023-progress-in-the-status-bar.md)。
+ *
+ * **走らせている最中のストアを見る。** 呼び出しの引数だけを見ると、
+ * ストアへ渡す経路を切っても緑のままになる
+ * (docs/testing.md の「配線を見ていない呼び出し」)。
+ */
+describe("実行中に覚える操作の種別", () => {
+  /** git を走らせている最中に、ストアに入っている種別 */
+  let seen: readonly Activity[] = [];
+
+  function record(): Promise<OpOutcome> {
+    seen = useRepoStore.getState().running.get("r1") ?? [];
+    return Promise.resolve(outcome());
+  }
+
+  beforeEach(() => {
+    seen = [];
+    vi.resetAllMocks();
+    resetListening();
+    useRepoStore.setState({
+      byId: new Map(),
+      order: [],
+      loaded: false,
+      loadError: null,
+      running: new Map(),
+      reading: new Set(),
+    });
+    useRepoStore.getState().registerAll([registration("r1", "acme-api")]);
+    useConsoleStore.setState({
+      blocks: new Map(),
+      activeTab: null,
+      failed: new Set(),
+      nextBlockId: 1,
+    });
+    useToastStore.getState().clear();
+    useBulkFetchStore.getState().reset();
+  });
+
+  it("フェッチ", async () => {
+    vi.mocked(ipc.fetchRepo).mockImplementation(record);
+
+    await fetchRepository("r1");
+
+    expect(seen).toEqual(["fetch"]);
+  });
+
+  it("現在のブランチのプル", async () => {
+    vi.mocked(ipc.pullCurrent).mockImplementation(record);
+
+    await pullRow(branchRow("main"));
+
+    expect(seen).toEqual(["pull"]);
+  });
+
+  /** 他のローカルブランチは早送りだが、見せ方はプルと同じ */
+  it("他のローカルブランチの早送りもプル", async () => {
+    vi.mocked(ipc.fastForwardBranch).mockImplementation(record);
+
+    await pullRow(branchRow("a"));
+
+    expect(seen).toEqual(["pull"]);
+  });
+
+  it("チェックアウト", async () => {
+    vi.mocked(ipc.checkoutBranch).mockImplementation(record);
+
+    await checkoutRow(branchRow("a"));
+
+    expect(seen).toEqual(["checkout"]);
+  });
+
+  it("チェックアウトとプル", async () => {
+    vi.mocked(ipc.checkoutAndPull).mockImplementation(record);
+
+    await checkoutAndPullRow(branchRow("a"));
+
+    expect(seen).toEqual(["checkoutAndPull"]);
+  });
+
+  it("直前のブランチに戻すのもチェックアウト", async () => {
+    vi.mocked(ipc.checkoutPrevious).mockImplementation(record);
+
+    await checkoutPreviousBranch("r1");
+
+    expect(seen).toEqual(["checkout"]);
+  });
+
+  it("プッシュ", async () => {
+    vi.mocked(ipc.pushBranch).mockImplementation(record);
+
+    await pushBranch("r1", "main");
+
+    expect(seen).toEqual(["push"]);
+  });
+
+  it("名前の変更", async () => {
+    vi.mocked(ipc.renameBranch).mockImplementation(record);
+
+    await renameBranch("r1", "main", "trunk");
+
+    expect(seen).toEqual(["rename"]);
+  });
+
+  it("削除", async () => {
+    vi.mocked(ipc.deleteBranch).mockImplementation(record);
+
+    await deleteBranch("r1", "a", false);
+
+    expect(seen).toEqual(["delete"]);
+  });
+
+  /** 一括フェッチも投げる前に印を付ける。中身はフェッチ */
+  it("一括フェッチ", async () => {
+    vi.mocked(onRepoSnapshotUpdated).mockResolvedValue(vi.fn());
+    await listenForRepoUpdates();
+    vi.mocked(ipc.fetchAll).mockImplementation(() => {
+      seen = useRepoStore.getState().running.get("r1") ?? [];
+      return Promise.resolve(["r1"]);
+    });
+
+    await fetchAllRepositories();
+
+    expect(seen).toEqual(["fetch"]);
   });
 });

@@ -13,6 +13,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 実行中。**集計より先に出す** (docs/adr/0023-progress-in-the-status-bar.md) */
+.activity {
+  color: var(--fg-strong);
+}
+
+.activity,
 .behind,
 .ahead,
 .dirty,

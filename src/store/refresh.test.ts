@@ -5,13 +5,16 @@ import { makeSnapshot } from "@/test/factories";
 
 vi.mock("@/ipc/repos");
 vi.mock("@/ipc/ops");
+// 中身は本物のまま。失敗経路を見るテストだけ 1 回差し替える
+vi.mock("./bootstrap", { spy: true });
 
 import * as ops from "@/ipc/ops";
 import * as ipc from "@/ipc/repos";
 
+import * as bootstrap from "./bootstrap";
 import { resetRequests } from "./bootstrap";
 import { refreshAllRepositories, refreshRepositories, resetRefreshing } from "./refresh";
-import { useRepoStore } from "./useRepoStore";
+import { isRunning, useRepoStore } from "./useRepoStore";
 
 /*
  * 更新 (docs/adr/0022-auto-refresh.md)。
@@ -43,6 +46,7 @@ beforeEach(() => {
     loaded: false,
     loadError: null,
     running: new Map(),
+    reading: new Set(),
   });
   useRepoStore
     .getState()
@@ -70,7 +74,7 @@ describe("全リポジトリの更新", () => {
    * ここでも読むと、同じリポジトリの読み取りが二重に走る
    */
   it("実行中のリポジトリは読まない", async () => {
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
 
     await refreshAllRepositories();
 
@@ -78,12 +82,102 @@ describe("全リポジトリの更新", () => {
   });
 
   it("実行が終わっていれば読む", async () => {
-    useRepoStore.getState().beginRun("r1");
-    useRepoStore.getState().endRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
+    useRepoStore.getState().endRun("r1", "fetch");
 
     await refreshAllRepositories();
 
     expect(requested().sort()).toEqual(["r1", "r2"]);
+  });
+});
+
+describe("取り直しの最中の印", () => {
+  /**
+   * ステータスバーがこれを読んで「更新中」を出す
+   * (docs/adr/0023-progress-in-the-status-bar.md)。
+   * **`running` には入れない。** `.git` の変化のたびにボタンが灰色になる
+   */
+  it("読んでいる間だけ reading に入り、実行中の印は付かない", async () => {
+    let during: { reading: string[]; running: boolean } | null = null;
+    vi.mocked(ipc).getRepoSnapshot.mockImplementation((repoId) => {
+      const state = useRepoStore.getState();
+      during = { reading: [...state.reading], running: isRunning(state, repoId) };
+      return Promise.resolve(makeSnapshot({ id: repoId, revision: 3 }));
+    });
+
+    await refreshRepositories(["r1"]);
+
+    expect(during).toEqual({ reading: ["r1"], running: false });
+    expect([...useRepoStore.getState().reading], "終わっても残っている").toEqual([]);
+  });
+
+  /**
+   * 失敗しても印を外す。外さないと「更新中」が出たままになり、
+   * そのリポジトリは以後ずっと重複排除に引っかかって取り直されなくなる。
+   *
+   * **`loadSnapshot` を差し替える。** `getRepoSnapshot` を reject させても
+   * `loadSnapshot` が中で握って `failRepo` に落とすので、`finally` を通らない
+   * (docs/store/bootstrap.ts)
+   */
+  it("読み取りが投げても印を外す", async () => {
+    vi.mocked(bootstrap.loadSnapshot).mockRejectedValueOnce(new Error("読めません"));
+
+    await expect(refreshRepositories(["r1"])).rejects.toThrow("読めません");
+
+    expect([...useRepoStore.getState().reading]).toEqual([]);
+  });
+});
+
+/*
+ * やり直し (docs/adr/0022-auto-refresh.md)。
+ *
+ * 読んでいる最中に来た分は、終わってから 1 回やり直す。
+ * **やり直しの前にもう一度見る。** 読んでいる間に状況は変わる。
+ */
+describe("やり直しの入口", () => {
+  /** 読み終わるまで待たせる。その間にストアを動かす */
+  function pending(): { resolve: () => void } {
+    let release = (): void => undefined;
+    vi.mocked(ipc).getRepoSnapshot.mockImplementation(
+      (repoId) =>
+        new Promise((done) => {
+          release = () => done(makeSnapshot({ id: repoId, revision: 3 }));
+        }),
+    );
+    return {
+      resolve: () => {
+        release();
+      },
+    };
+  }
+
+  /** `remove` が `reading` を掃除した意図を、やり直しが打ち消さない */
+  it("読んでいる間にリストから消えたら、やり直さない", async () => {
+    const first = pending();
+    const running = refreshRepositories(["r1"]);
+    await refreshRepositories(["r1"]);
+
+    useRepoStore.getState().remove("r1");
+    vi.mocked(ipc).getRepoSnapshot.mockResolvedValue(makeSnapshot({ id: "r1", revision: 4 }));
+    first.resolve();
+    await running;
+
+    expect(requested()).toEqual(["r1"]);
+    expect([...useRepoStore.getState().reading], "消したはずの id が入り直している").toEqual([]);
+  });
+
+  /** 取り直しはボタンを無効にしないので、読んでいる間に書き込みが始まり得る */
+  it("読んでいる間に書き込みが始まったら、やり直さない", async () => {
+    const first = pending();
+    const running = refreshRepositories(["r1"]);
+    await refreshRepositories(["r1"]);
+
+    useRepoStore.getState().beginRun("r1", "checkout");
+    vi.mocked(ipc).getRepoSnapshot.mockResolvedValue(makeSnapshot({ id: "r1", revision: 4 }));
+    first.resolve();
+    await running;
+
+    expect(requested()).toEqual(["r1"]);
   });
 });
 
@@ -103,7 +197,7 @@ describe("指定したリポジトリの更新", () => {
   });
 
   it("実行中のリポジトリは読まない", async () => {
-    useRepoStore.getState().beginRun("r2");
+    useRepoStore.getState().beginRun("r2", "fetch");
 
     await refreshRepositories(["r1", "r2"]);
 

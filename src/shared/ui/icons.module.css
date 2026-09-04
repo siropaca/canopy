@@ -48,6 +48,33 @@
   stroke-width: 1.35;
 }
 
+/*
+ * 実行中の輪。**回すのはこれ 1 つだけ**
+ * (docs/adr/0023-progress-in-the-status-bar.md)。
+ * 行ごとに回すと一括フェッチで 11 個同時に回る。
+ */
+.spinner {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  stroke-width: 1.35;
+  animation: spin 900ms linear infinite;
+  transform-origin: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* OS で「視差効果を減らす」を選んでいる人には回さない */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 /* 未コミットの丸。矢印と同じ枠に収めて、線ではなく塗りで描く */
 .dot {
   flex: 0 0 11px;

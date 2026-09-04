@@ -47,6 +47,10 @@ const VISUAL = [
   "stroke-width",
   "fill",
   "stroke",
+  // 動くのは実行中の輪だけ。止まっても誰も気づかない形にしない
+  // (docs/adr/0023-progress-in-the-status-bar.md)
+  "animation",
+  "transform-origin",
 ] as const;
 
 interface Pair {
@@ -276,11 +280,20 @@ const PAIRS: readonly Pair[] = [
     rule: ".warning",
   },
 
+  // ---- ステータスバー ----
+  // 実行中 (docs/adr/0023-progress-in-the-status-bar.md)
+  {
+    mock: ".status .busy",
+    module: "features/status-bar/StatusBar.module.css",
+    rule: ".activity",
+  },
+
   // ---- アイコン ----
   // インジケーターの寸法がずれると、丸と矢印の大きさが揃わない (フェーズ 5 で実際にずれた)
   { mock: "svg.ar", module: "shared/ui/icons.module.css", rule: ".arrow" },
   { mock: "svg.dt", module: "shared/ui/icons.module.css", rule: ".dot" },
   { mock: "svg.wti", module: "shared/ui/icons.module.css", rule: ".worktree" },
+  { mock: "svg.sp", module: "shared/ui/icons.module.css", rule: ".spinner" },
 
   // ---- スプリッタ ----
   { mock: ".splitter", module: "shared/ui/Splitter.module.css", rule: ".splitter" },
@@ -288,10 +301,42 @@ const PAIRS: readonly Pair[] = [
 
 type Rules = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
-/** CSS のテキストを「セレクタ -> プロパティ」に開く。@ 規則とネストは扱わない */
+/**
+ * `@media` や `@keyframes` の中身を、本文ごと落とす。
+ *
+ * **黙って混ぜない。** 素朴に開くと `@media` の中の `.spinner` が外の `.spinner` を
+ * 上書きして、`prefers-reduced-motion` 用の打ち消しが本体の値として読まれる。
+ */
+export function stripAtRules(css: string): string {
+  let kept = "";
+  let at = 0;
+  while (at < css.length) {
+    const start = css.indexOf("@", at);
+    if (start === -1) {
+      kept += css.slice(at);
+      break;
+    }
+    kept += css.slice(at, start);
+    const open = css.indexOf("{", start);
+    if (open === -1) break;
+    let depth = 0;
+    let cursor = open;
+    for (; cursor < css.length; cursor += 1) {
+      if (css[cursor] === "{") depth += 1;
+      else if (css[cursor] === "}") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    at = cursor + 1;
+  }
+  return kept;
+}
+
+/** CSS のテキストを「セレクタ -> プロパティ」に開く。ネストは扱わない */
 export function parseRules(css: string): Rules {
   const rules = new Map<string, Map<string, string>>();
-  const withoutComments = css.replaceAll(/\/\*[\s\S]*?\*\//g, "");
+  const withoutComments = stripAtRules(css.replaceAll(/\/\*[\s\S]*?\*\//g, ""));
   for (const [, selectors, body] of withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (selectors === undefined || body === undefined) continue;
     const declarations = new Map<string, string>();
@@ -422,12 +467,14 @@ describe("比べる範囲", () => {
       "stroke-width",
       "fill",
       "stroke",
+      "animation",
+      "transform-origin",
     ]);
   });
 
   it("モックの class を 1 つずつ対応させてある", () => {
     // 減らせば差分は出なくなる。組数を固定して、外したら落とす
-    expect(PAIRS).toHaveLength(75);
+    expect(PAIRS).toHaveLength(77);
   });
 });
 
@@ -450,6 +497,23 @@ describe("parseRules", () => {
 
   it("コメントは読まない", () => {
     expect(parseRules("/* .a{color:red} */ .b{color:blue}").get(".a")).toBeUndefined();
+  });
+
+  /**
+   * `@media` の中で同じ class を打ち消していると、外の値を上書きしてしまう。
+   * `prefers-reduced-motion` の打ち消しが本体の値として読まれた (実際に踏んだ)
+   */
+  it("@ 規則の中は読まない", () => {
+    const css = ".a{animation:spin 900ms linear infinite}@media (x){.a{animation:none}}";
+
+    expect(parseRules(css).get(".a")?.get("animation")).toBe("spin 900ms linear infinite");
+  });
+
+  it("@keyframes の中身をセレクタとして拾わない", () => {
+    const css = "@keyframes spin{to{transform:rotate(360deg)}}.a{color:red}";
+
+    expect(parseRules(css).get("to")).toBeUndefined();
+    expect(parseRules(css).get(".a")?.get("color")).toBe("red");
   });
 
   it("同じセレクタが 2 度出たら後から足す", () => {

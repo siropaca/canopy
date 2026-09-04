@@ -304,7 +304,7 @@ describe("詳細ペイン", () => {
       order: ["r1"],
       loaded: true,
       loadError: null,
-      running: new Map([["r1", 1]]),
+      running: new Map([["r1", ["fetch" as const]]]),
     });
     const rows = flatten(orderedRepos(useRepoStore.getState()), {
       expanded: new Set<string>(),

@@ -15,16 +15,6 @@ import { isRunning, useRepoStore } from "./useRepoStore";
  */
 
 /**
- * いま読んでいるリポジトリ。
- *
- * **読み取りには重複排除が無い。** 書き込みは `GitQueue::try_claim` が連打を
- * 弾くが (docs/adr/0009-concurrency-and-refresh.md)、`get_repo_snapshot` は
- * 投げた分だけ Rust 側に届く。「更新」を 10 回押すと 11 リポジトリ × 10 本が
- * 読み取りの枠 4 本を埋めて、その間チェックアウト後の取り直しまで待たされる。
- */
-const reading = new Set<RepoId>();
-
-/**
  * 読んでいる最中に、もう一度求められたリポジトリ。
  *
  * **捨てずに 1 回だけやり直す。** 走っている読み取りは要求より前の状態を
@@ -47,29 +37,51 @@ export function refreshAllRepositories(): Promise<void> {
  * 知らない id も読まない。監視のイベントは、リストから消したあとに遅れて届き得る。
  */
 export async function refreshRepositories(ids: readonly RepoId[]): Promise<void> {
-  const repos = useRepoStore.getState();
-  const targets = ids.filter((id) => repos.byId.has(id) && !isRunning(repos, id));
-  await Promise.all(targets.map((id) => refreshOne(id)));
+  await Promise.all(ids.filter(shouldRead).map((id) => refreshOne(id)));
 }
 
-/** 1 件を読む。読んでいる最中なら、終わってから 1 回だけやり直す */
+/**
+ * いま読んでよいか。
+ *
+ * **判定はここ 1 本。** やり直しの側で書き直すと、片方だけ古くなる。
+ */
+function shouldRead(repoId: RepoId): boolean {
+  const repos = useRepoStore.getState();
+  return repos.byId.has(repoId) && !isRunning(repos, repoId);
+}
+
+/**
+ * 1 件を読む。読んでいる最中なら、終わってから 1 回だけやり直す。
+ *
+ * **読み取りには重複排除が無い。** 書き込みは `GitQueue::try_claim` が連打を
+ * 弾くが (docs/adr/0009-concurrency-and-refresh.md)、`get_repo_snapshot` は
+ * 投げた分だけ Rust 側に届く。「更新」を 10 回押すと 11 リポジトリ × 10 本が
+ * 読み取りの枠 4 本を埋めて、その間チェックアウト後の取り直しまで待たされる。
+ *
+ * 読んでいる最中はストアの `reading` に入る。ステータスバーがそれを出す
+ * (docs/adr/0023-progress-in-the-status-bar.md)。
+ */
 async function refreshOne(repoId: RepoId): Promise<void> {
-  if (reading.has(repoId)) {
+  if (useRepoStore.getState().reading.has(repoId)) {
     askedAgain.add(repoId);
     return;
   }
-  reading.add(repoId);
-  try {
-    await loadSnapshot(repoId);
-  } finally {
-    reading.delete(repoId);
+  // **繰り返しにする。** 再帰にすると、変化が続いている間ずっと
+  // `refreshOne` のフレームが 1 段ずつ積み上がる
+  for (;;) {
+    useRepoStore.getState().beginRead(repoId);
+    try {
+      await loadSnapshot(repoId);
+    } finally {
+      useRepoStore.getState().endRead(repoId);
+    }
+    // **やり直す前にもう一度見る。** 読んでいる間にリストから消えたり、
+    // 書き込みが始まったりする (docs/adr/0022-auto-refresh.md)
+    if (!askedAgain.delete(repoId) || !shouldRead(repoId)) return;
   }
-  // やり直しは 1 回で足りる。**再帰は 2 段までしか深くならない**
-  if (askedAgain.delete(repoId)) await refreshOne(repoId);
 }
 
-/** テスト用。読んでいる最中の覚えを戻す */
+/** テスト用。やり直しの覚えを戻す */
 export function resetRefreshing(): void {
-  reading.clear();
   askedAgain.clear();
 }

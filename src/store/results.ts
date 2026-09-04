@@ -148,7 +148,7 @@ function abandonBulkFetch(): void {
   const repos = useRepoStore.getState();
   for (const repoId of bulk.targets) {
     if (bulk.done.has(repoId)) continue;
-    repos.endRun(repoId);
+    repos.endRun(repoId, "fetch");
     abandoned.add(repoId);
   }
   useToastStore.getState().push({ kind: "failure", text: bulkFetchSummary(bulk) });

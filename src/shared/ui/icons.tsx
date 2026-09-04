@@ -98,6 +98,20 @@ export function DirtyIcon() {
   );
 }
 
+/**
+ * 実行中の輪。
+ *
+ * **切れ目のある輪にする。** 塗りつぶした円だと回っているのが分からない
+ * (docs/adr/0023-progress-in-the-status-bar.md)。
+ */
+export function SpinnerIcon() {
+  return (
+    <svg className={styles.spinner} viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M6 1.6a4.4 4.4 0 1 1-3.1 1.3" />
+    </svg>
+  );
+}
+
 /** behind。取り込むもの */
 export function BehindIcon() {
   return (

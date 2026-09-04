@@ -39,9 +39,10 @@ describe("一括フェッチのイベント", () => {
       loaded: false,
       loadError: null,
       running: new Map(),
+      reading: new Set(),
     });
     useRepoStore.getState().registerAll([registration("r1", "a")]);
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
     useConsoleStore.setState({
       blocks: new Map(),
       activeTab: null,
@@ -193,6 +194,7 @@ describe("`.git` の変化", () => {
       loaded: false,
       loadError: null,
       running: new Map(),
+      reading: new Set(),
     });
     useRepoStore
       .getState()
@@ -230,7 +232,7 @@ describe("`.git` の変化", () => {
   /** 取り直しは操作の側が既にやっている (docs/adr/0009-concurrency-and-refresh.md) */
   it("実行中のリポジトリは取り直さない", async () => {
     const changed = await subscribe();
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
 
     changed(["r1", "r2"]);
     await vi.waitFor(() => {

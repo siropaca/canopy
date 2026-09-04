@@ -3,6 +3,7 @@ import type { OpOutcome } from "@/ipc/generated/OpOutcome";
 import type { PushPreview } from "@/ipc/generated/PushPreview";
 import type { RepoId, RowNode } from "@/ipc/types";
 import * as ipc from "@/ipc/ops";
+import type { Activity } from "@/shared/lib/activity";
 import { messageOf } from "@/shared/lib/errorMessage";
 
 import { isListeningForRepoUpdates } from "./events";
@@ -32,14 +33,18 @@ import { orderedRepos, useRepoStore } from "./useRepoStore";
  * 結果の出し先 (コンソールとトースト) は `store/results.ts` の 1 本
  * (docs/specs/ui.md の「コンソール」「トースト」)。
  * 一括フェッチの 1 件として走るときだけ `record` を差し替える。
+ *
+ * **何をしているかも渡す。** ステータスバーがこれを読んで文言を出す
+ * (docs/adr/0023-progress-in-the-status-bar.md)。
  */
 async function perform(
   repoId: RepoId,
+  activity: Activity,
   call: () => Promise<OpOutcome>,
   record: (repoId: RepoId, result: CommandResult) => void = recordResult,
 ): Promise<CommandResult> {
   const repos = useRepoStore.getState();
-  repos.beginRun(repoId);
+  repos.beginRun(repoId, activity);
   try {
     const outcome = await call();
     if (outcome.snapshot !== null) {
@@ -58,7 +63,7 @@ async function perform(
     record(repoId, failed);
     return failed;
   } finally {
-    repos.endRun(repoId);
+    repos.endRun(repoId, activity);
   }
 }
 
@@ -74,7 +79,7 @@ function failure(message: string): CommandResult {
 }
 
 export function fetchRepository(repoId: RepoId): Promise<CommandResult> {
-  return perform(repoId, () => ipc.fetchRepo(repoId));
+  return perform(repoId, "fetch", () => ipc.fetchRepo(repoId));
 }
 
 /**
@@ -103,29 +108,29 @@ export async function fetchAllRepositories(): Promise<RepoId[]> {
   startBulkFetch(known);
   if (!isListeningForRepoUpdates()) {
     for (const id of known) {
-      await perform(id, () => ipc.fetchRepo(id), recordBulkResult);
+      await perform(id, "fetch", () => ipc.fetchRepo(id), recordBulkResult);
     }
     return known;
   }
 
-  for (const id of known) repos.beginRun(id);
+  for (const id of known) repos.beginRun(id, "fetch");
   let ids: RepoId[];
   try {
     ids = await ipc.fetchAll();
   } catch (error) {
     // 一覧が引けないのはリポジトリ個別の話ではない。読み込みエラーとして出す
-    for (const id of known) repos.endRun(id);
+    for (const id of known) repos.endRun(id, "fetch");
     cancelBulkFetch();
     repos.setLoadError(messageOf(error));
     return [];
   }
   // 対象から外れた id の印は自分で解く。イベントは来ない
   for (const id of known) {
-    if (!ids.includes(id)) repos.endRun(id);
+    if (!ids.includes(id)) repos.endRun(id, "fetch");
   }
   // 知らなかった id が返ってきたら、その分の印を付ける
   for (const id of ids) {
-    if (!known.includes(id)) repos.beginRun(id);
+    if (!known.includes(id)) repos.beginRun(id, "fetch");
   }
   // 実際に走った一覧に合わせる。外れた id を待ち続けるとボタンが戻らない
   retargetBulkFetch(ids);
@@ -141,12 +146,12 @@ export async function fetchAllRepositories(): Promise<RepoId[]> {
  */
 export function pullRow(row: RowNode): Promise<CommandResult> {
   if (row.kind === "repo") {
-    return perform(row.repoId, () => ipc.pullCurrent(row.repoId));
+    return perform(row.repoId, "pull", () => ipc.pullCurrent(row.repoId));
   }
   if (row.kind === "branch") {
     return row.branch.is_current
-      ? perform(row.repoId, () => ipc.pullCurrent(row.repoId))
-      : perform(row.repoId, () => ipc.fastForwardBranch(row.repoId, row.branch.name));
+      ? perform(row.repoId, "pull", () => ipc.pullCurrent(row.repoId))
+      : perform(row.repoId, "pull", () => ipc.fastForwardBranch(row.repoId, row.branch.name));
   }
   return Promise.resolve(failure("この行はプルできません"));
 }
@@ -155,7 +160,7 @@ export function pullRow(row: RowNode): Promise<CommandResult> {
 export function checkoutRow(row: RowNode): Promise<CommandResult> {
   const target = checkoutTargetOf(row);
   if (target === null) return Promise.resolve(failure("この行はチェックアウトできません"));
-  return perform(row.repoId, () =>
+  return perform(row.repoId, "checkout", () =>
     target.tag
       ? ipc.checkoutTag(row.repoId, target.name)
       : ipc.checkoutBranch(row.repoId, target.name),
@@ -168,12 +173,12 @@ export function checkoutAndPullRow(row: RowNode): Promise<CommandResult> {
   if (target === null || target.tag) {
     return Promise.resolve(failure("この行はチェックアウトできません"));
   }
-  return perform(row.repoId, () => ipc.checkoutAndPull(row.repoId, target.name));
+  return perform(row.repoId, "checkoutAndPull", () => ipc.checkoutAndPull(row.repoId, target.name));
 }
 
 /** detached HEAD から直前のブランチへ戻る */
 export function checkoutPreviousBranch(repoId: RepoId): Promise<CommandResult> {
-  return perform(repoId, () => ipc.checkoutPrevious(repoId));
+  return perform(repoId, "checkout", () => ipc.checkoutPrevious(repoId));
 }
 
 /**
@@ -184,7 +189,7 @@ export function pushBranch(
   branch: string,
   forceWithLease: string | null = null,
 ): Promise<CommandResult> {
-  return perform(repoId, () => ipc.pushBranch(repoId, branch, forceWithLease));
+  return perform(repoId, "push", () => ipc.pushBranch(repoId, branch, forceWithLease));
 }
 
 export function renameBranch(
@@ -192,11 +197,11 @@ export function renameBranch(
   name: string,
   newName: string,
 ): Promise<CommandResult> {
-  return perform(repoId, () => ipc.renameBranch(repoId, name, newName));
+  return perform(repoId, "rename", () => ipc.renameBranch(repoId, name, newName));
 }
 
 export function deleteBranch(repoId: RepoId, name: string, force: boolean): Promise<CommandResult> {
-  return perform(repoId, () => ipc.deleteBranch(repoId, name, force));
+  return perform(repoId, "delete", () => ipc.deleteBranch(repoId, name, force));
 }
 
 /**

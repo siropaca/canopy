@@ -14,7 +14,7 @@ import {
 import { applyRepoUpdate } from "./events";
 import { bulkFetchRunning, useBulkFetchStore } from "./useBulkFetchStore";
 import { useConsoleStore } from "./useConsoleStore";
-import { useRepoStore } from "./useRepoStore";
+import { isRunning, useRepoStore } from "./useRepoStore";
 import { useToastStore } from "./useToastStore";
 import { useUiStore } from "./useUiStore";
 
@@ -266,7 +266,7 @@ describe("一括フェッチ", () => {
 });
 
 function runningOf(repoId: string): boolean {
-  return (useRepoStore.getState().running.get(repoId) ?? 0) > 0;
+  return isRunning(useRepoStore.getState(), repoId);
 }
 
 describe("結果が届かない一括フェッチ", () => {
@@ -285,8 +285,8 @@ describe("結果が届かない一括フェッチ", () => {
   });
 
   it("届かないまま猶予を過ぎたら、実行中の印を外して 1 件のトーストを出す", () => {
-    useRepoStore.getState().beginRun("r1");
-    useRepoStore.getState().beginRun("r2");
+    useRepoStore.getState().beginRun("r1", "fetch");
+    useRepoStore.getState().beginRun("r2", "fetch");
     startBulkFetch(["r1", "r2"]);
     recordBulkResult("r1", ran([step()]));
 
@@ -302,7 +302,7 @@ describe("結果が届かない一括フェッチ", () => {
   /** **投げた時点から見張る。** 1 件目が届いてから始めると、購読が最初から
    * 切れているときに永久に待つことになる */
   it("1 件も届かないまま猶予を過ぎても畳む", () => {
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
     startBulkFetch(["r1"]);
 
     vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
@@ -313,8 +313,8 @@ describe("結果が届かない一括フェッチ", () => {
 
   it("届いたリポジトリの実行中は触らない", () => {
     // 届いた分の印は `applyRepoUpdate` が外す。ここで二重に外さない
-    useRepoStore.getState().beginRun("r1");
-    useRepoStore.getState().beginRun("r2");
+    useRepoStore.getState().beginRun("r1", "fetch");
+    useRepoStore.getState().beginRun("r2", "fetch");
     startBulkFetch(["r1", "r2"]);
     recordBulkResult("r1", ran([step()]));
 
@@ -388,12 +388,12 @@ describe("畳んだあとに遅れて届いた結果", () => {
    * **別の操作が握っている 1 本**を消す (docs/specs/ui.md の「実行中の扱い」)
    */
   it("実行中の印を二重に外さない", () => {
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
     startBulkFetch(["r1"]);
     vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
     expect(runningOf("r1")).toBe(false);
     // 畳んだあとに別の操作が始まる
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
 
     // 遅れて一括フェッチの結果が届く
     applyRepoUpdate({
@@ -429,13 +429,13 @@ describe("畳んだあとに遅れて届いた結果", () => {
    */
   it("次の一括フェッチの結果では実行中が外れる", () => {
     // 1 回目: 届かないまま畳む
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
     startBulkFetch(["r1"]);
     vi.advanceTimersByTime(BULK_FETCH_IDLE_LIMIT_MS);
     useToastStore.getState().clear();
 
     // 2 回目: 今度は結果が届く
-    useRepoStore.getState().beginRun("r1");
+    useRepoStore.getState().beginRun("r1", "fetch");
     startBulkFetch(["r1"]);
     applyRepoUpdate({
       repo_id: "r1",

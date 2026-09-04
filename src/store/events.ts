@@ -36,7 +36,7 @@ export function applyRepoUpdate(update: RepoUpdate): void {
   // 実行中の印は投入時に付けている (store/opsActions.ts)。
   // **畳んだ分はそのときに外している。** ここでもう一度外すと、その時点で
   // 別の操作が握っている 1 本を消す (store/results.ts)
-  if (!wasAbandoned(update.repo_id)) repos.endRun(update.repo_id);
+  if (!wasAbandoned(update.repo_id)) repos.endRun(update.repo_id, "fetch");
 }
 
 /**
