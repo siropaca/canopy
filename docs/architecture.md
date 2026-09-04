@@ -40,7 +40,7 @@ canopy/
 │   │   ├── sidebar/            左のアイコンツールバー
 │   │   ├── status-bar/         下端の集計表示
 │   │   ├── context-menu/       右クリックメニューと、行ごとの項目の決定
-│   │   ├── dialog/             ダイアログの枠と個別ダイアログ (名前の変更・プッシュ)
+│   │   ├── dialog/             ダイアログの枠と個別ダイアログ (名前の変更・プッシュ・ブランチの削除)
 │   │   └── toast/              トースト
 │   ├── shared/
 │   │   ├── ui/                 features をまたいで使う部品 (スクロールバー、仮想リスト、スプリッタ)
@@ -66,6 +66,7 @@ canopy/
 │   │   ├── os.rs               Finder とターミナルを開く (`open`)
 │   │   ├── state.rs            コマンドが共有する状態 (設定・キュー・ウィンドウ)
 │   │   ├── tray.rs             メニューバーのアイコンとメニュー
+│   │   ├── watch.rs            `.git` の監視。変わったリポジトリをまとめて知らせる
 │   │   └── window.rs           ウィンドウの位置とサイズ、隠す / 戻す
 │   ├── capabilities/           Tauri の権限 (docs/security.md)
 │   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
@@ -123,7 +124,7 @@ features の `useEffect` で購読すると、`revision` の比較を通す場�
 2. **リポジトリ見出しを全件すぐに描画する。** 中身は `loading` のまま
 3. 各リポジトリの状態を Rust 側で並列に読み取り、`RepoSnapshot` として返す。届いた分から埋める
 4. フロントはスナップショットを描画するだけ。git の状態をフロントで計算しない
-5. 操作 (checkout / pull / push / fetch / rename) は Tauri コマンドを 1 回呼ぶ
+5. 操作 (checkout / pull / push / fetch / rename / delete) は Tauri コマンドを 1 回呼ぶ
 6. コマンドは結果 (実行した段ごとの成否・stdout・stderr) を返し、**成否に関係なく**対象リポジトリのスナップショットを取り直して一緒に返す
 7. フロントは結果からトーストとコンソール行を作り、スナップショットで表示を更新する。`revision` が古ければ捨てる
 
@@ -140,6 +141,10 @@ git の実態と画面がずれる方が、少し待つより困る。
 
 取り直しの具体的な規定は [specs/git-operations.md](specs/git-operations.md) と [adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md)。
 
+操作以外にも取り直しの引き金が 3 つある ([adr/0022-auto-refresh.md](adr/0022-auto-refresh.md))。  
+サイドバーの「更新」、ウィンドウが前面に戻ったとき、`.git` が変わったとき。  
+**どれも `store/refresh.ts` の 1 箇所に落ちる。** 分けて書くと、どれか 1 つだけ実行中のリポジトリを飛ばさない、という壊れ方をする。
+
 **「locate → ロック → 実行 → 取り直し」の順序は `src-tauri/src/ops.rs` の 1 箇所に置く。**  
 コマンドごとに書くと、どれか 1 本だけ取り直しをロックの外でやる、という壊れ方をする。  
 `ops.rs` の関数は `&AppState` を受けるので、Tauri 無しでテストできる。
@@ -155,6 +160,8 @@ git の実態と画面がずれる方が、少し待つより困る。
 - 一括フェッチの同時実行上限は全体の上限より小さくして、対話操作の枠を空ける
 - **ネットワークの枠はロックを取る前に確保する。** ロックを持って枠を待つと、一括フェッチ中に同じリポジトリのチェックアウトが待たされる
 - 一括フェッチの結果は `repo_snapshot_updated` イベントで返ってきた順に流す
+- **`.git` の変化は溜めてから 1 回で流す** (`repos_changed`)。git の 1 操作で何十ファイルも動く。
+  自分が走らせた書き込みの間の変化は捨てる ([adr/0022-auto-refresh.md](adr/0022-auto-refresh.md))
 - **子プロセスはグループごと畳む。** 締め切りとアプリ終了で `killpg` する。直の子だけを殺すと孫の `ssh` が残る
   ([adr/0020-process-group-kill.md](adr/0020-process-group-kill.md))
 

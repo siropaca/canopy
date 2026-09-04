@@ -280,6 +280,39 @@ async fn のローカル変数は future の中に入る。
 
 畳めたことは「`sleep 30` が終わる前に返ったこと」で見る。
 
+## ファイルの監視
+
+### 監視のイベントは symlink を畳んだパスで届く
+
+macOS の FSEvents は `/private/var/...` を返す。  
+一時ディレクトリは `/var/folders/...` なので、そのまま突き合わせると**一致しない**。  
+`git rev-parse --git-common-dir` の結果を `std::fs::canonicalize` に通していないと、
+監視は動いているのに 1 件も拾えない状態になる。
+
+統合テストで確かめる (`src-tauri/tests/watching.rs`)。  
+実際に畳まずに書いたら、その場で落ちることを確認済み。  
+**ユーザーのリポジトリは `/Users/...` で symlink が無いので、手元の確認だけでは気づけない。**
+
+### `watch` / `unwatch` のたびにストリーム全体が張り直される
+
+`notify` の macOS 実装 (FSEvents) は、`watch` を 1 回呼ぶだけで
+**いま張っている全部**を止めて作り直す (`stop()` → `append_path` → `run()`)。  
+再開は `kFSEventStreamEventIdSinceNow` なので、止まっている間の変化は届かない。
+
+リポジトリを 1 件追加しただけで、他の 10 件の監視にも数十 ms の穴が空く。  
+差分だけを `watch` / `unwatch` しても、**穴が空く回数が減るだけで無くならない。**  
+`.git` の監視はこれを前提にしていて、取りこぼしは他の 2 つの引き金
+([adr/0022-auto-refresh.md](adr/0022-auto-refresh.md)) が拾う。
+
+### `git status` が `index` を書き直すと、監視が自分で自分を呼ぶ
+
+取り直しは `git status` を実行する。  
+git は stat 情報が古いと `index` を書き直すので、それが監視に届いて次の取り直しを呼ぶ。
+
+こちらは `GIT_OPTIONAL_LOCKS=0` を渡しているので書き直さない
+([adr/0009-concurrency-and-refresh.md](adr/0009-concurrency-and-refresh.md))。  
+**この環境変数を外すと、監視が止まらなくなる。**
+
 ## git の呼び出し
 
 ### 出力形式は固定する

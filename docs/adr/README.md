@@ -35,5 +35,7 @@
 | [0018](0018-command-result-steps.md) | 操作の結果は「段」の列で返す | 採用 |
 | [0019](0019-reorder-without-dnd-kit.md) | ドラッグ並び替えは dnd-kit を使わず自前で書く | 採用 |
 | [0020](0020-process-group-kill.md) | 子プロセスはグループごと畳む | 採用 |
+| [0021](0021-delete-local-branch.md) | ローカルブランチの削除を v1 に入れる | 採用 |
+| [0022](0022-auto-refresh.md) | 変更を自分で見つけて取り直す | 採用 |
 
 新しい ADR を足したらこの表にも追記する。
