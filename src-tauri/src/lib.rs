@@ -8,6 +8,7 @@ pub mod queue;
 pub mod state;
 pub mod store;
 pub mod tray;
+pub mod watch;
 pub mod window;
 
 /// Whether the WebView may navigate to `url`.
@@ -58,6 +59,7 @@ pub fn invoke_handler<R: tauri::Runtime>()
         commands::ops::checkout_previous,
         commands::ops::push_branch,
         commands::ops::rename_branch,
+        commands::ops::delete_branch,
         commands::ops::get_push_preview,
         commands::ops::reveal_in_finder,
         commands::ops::open_in_terminal,
@@ -104,6 +106,17 @@ fn remember_window<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) {
     if let Some(state) = win.try_state::<state::AppState>() {
         state.record_window(geometry);
     }
+}
+
+/// Watch every registered repository's `.git`.
+///
+/// **登録が変わったら呼び直す。呼ぶ形はここ 1 本にする。** 経路ごとに書くと、
+/// 登録を変える経路を足したときに張り直しを忘れる。忘れても画面にも stderr にも
+/// 何も出ないので、そのリポジトリだけ黙って更新されなくなる
+/// (docs/adr/0022-auto-refresh.md)。
+pub(crate) async fn watch_registered<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let targets = app.state::<state::AppState>().watch_targets().await;
+    watch::sync(app, targets);
 }
 
 /// Whether to wait for the write. 終了時だけ待つ。
@@ -172,6 +185,15 @@ pub fn run() {
                 window::restore(&main, saved);
             }
             tray::install(app.handle())?;
+
+            // `.git` の監視 (docs/adr/0022-auto-refresh.md)。
+            // **張れなくても起動は続ける。** 「更新」と前面復帰の引き金は残る
+            let quiet = app.state::<state::AppState>().quiet().clone();
+            if let Err(error) = watch::install(app.handle(), quiet) {
+                eprintln!("canopy: .git の監視を始められません: {error}");
+            }
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move { watch_registered(&handle).await });
             Ok(())
         })
         .on_window_event(on_window_event)

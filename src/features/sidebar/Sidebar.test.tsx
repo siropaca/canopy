@@ -23,9 +23,11 @@ function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
     pullEnabled: false,
     fetchEnabled: true,
     removeEnabled: false,
+    deleteEnabled: false,
     groupDirectories: true,
     localOnly: false,
     consoleOpen: false,
+    onRefresh: vi.fn(),
     onFetch: vi.fn(),
     onPull: vi.fn(),
     onExpandLocal: vi.fn(),
@@ -33,6 +35,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
     onCollapseAll: vi.fn(),
     onAddRepo: vi.fn(),
     onRemoveRepo: vi.fn(),
+    onDeleteBranch: vi.fn(),
     onToggleGroup: vi.fn(),
     onToggleLocalOnly: vi.fn(),
     onToggleConsole: vi.fn(),
@@ -63,11 +66,29 @@ describe("サイドバー", () => {
     renderSidebar();
 
     expect(button("新規ブランチ (v2)").disabled).toBe(true);
-    expect(button("ブランチの削除 (v2)").disabled).toBe(true);
 
     hover(button("新規ブランチ (v2)"));
 
     expect(screen.getByRole("tooltip").textContent).toBe("新規ブランチ (v2)");
+  });
+
+  /**
+   * ブランチの削除は v1 に入れた (docs/adr/0021-delete-local-branch.md)。
+   * v2 のグレーではなく、選択で決まる無効にする
+   */
+  it("ブランチの削除は選択で有効になる。(v2) は付かない", () => {
+    const { onDeleteBranch } = renderSidebar({ deleteEnabled: true });
+
+    expect(button("ブランチの削除").disabled).toBe(false);
+    button("ブランチの削除").click();
+
+    expect(onDeleteBranch).toHaveBeenCalledOnce();
+  });
+
+  it("削除できない選択では無効", () => {
+    renderSidebar({ deleteEnabled: false });
+
+    expect(button("ブランチの削除").disabled).toBe(true);
   });
 
   it("選択で無効になるだけのボタンには (v2) を付けない", () => {
@@ -122,6 +143,20 @@ describe("サイドバー", () => {
     renderSidebar({ removeEnabled: false });
 
     expect(button("リポジトリをリストから削除").disabled).toBe(true);
+  });
+
+  /**
+   * ターミナルで動かした結果を映すための手動の引き金
+   * (docs/adr/0022-auto-refresh.md)。**フェッチとは別のボタンにする**
+   */
+  it("更新は常に押せて、フェッチとは別のハンドラを呼ぶ", () => {
+    const props = renderSidebar({ fetchEnabled: false });
+
+    expect(button("更新").disabled).toBe(false);
+    button("更新").click();
+
+    expect(props.onRefresh).toHaveBeenCalledOnce();
+    expect(props.onFetch).not.toHaveBeenCalled();
   });
 
   it("フェッチとプルはそれぞれのハンドラを呼ぶ", () => {

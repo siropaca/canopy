@@ -25,17 +25,21 @@ export const COMMANDS = {
   checkoutPrevious: "checkout_previous",
   pushBranch: "push_branch",
   renameBranch: "rename_branch",
+  deleteBranch: "delete_branch",
   getPushPreview: "get_push_preview",
   revealInFinder: "reveal_in_finder",
   openInTerminal: "open_in_terminal",
 } as const;
 
 /**
- * 一括フェッチの結果が 1 件ずつ届くイベント。
+ * Rust から届くイベント。
  *
- * 11 本の invoke を並列に投げる形にしない。返ってきた順に差し替える
- * (docs/adr/0009-concurrency-and-refresh.md の「一括フェッチ」)。
+ * - `repo_snapshot_updated`: 一括フェッチの結果が 1 件ずつ届く。11 本の invoke を
+ *   並列に投げる形にしない ([ADR-0009](../../docs/adr/0009-concurrency-and-refresh.md))
+ * - `repos_changed`: `.git` が変わったリポジトリがまとめて届く
+ *   ([ADR-0022](../../docs/adr/0022-auto-refresh.md))
  */
 export const EVENTS = {
   repoSnapshotUpdated: "repo_snapshot_updated",
+  reposChanged: "repos_changed",
 } as const;

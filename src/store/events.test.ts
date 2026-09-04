@@ -4,12 +4,16 @@ import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
 import { makeOutcome, makeSnapshot } from "@/test/factories";
 
 vi.mock("@/ipc/events");
+vi.mock("@/ipc/repos");
 
-import { onRepoSnapshotUpdated } from "@/ipc/events";
+import { onRepoSnapshotUpdated, onReposChanged } from "@/ipc/events";
+import * as repos from "@/ipc/repos";
 
+import { resetRequests } from "./bootstrap";
 import {
   applyRepoUpdate,
   isListeningForRepoUpdates,
+  listenForRepoChanges,
   listenForRepoUpdates,
   resetListening,
 } from "./events";
@@ -17,6 +21,7 @@ import { useBulkFetchStore } from "./useBulkFetchStore";
 import { useConsoleStore } from "./useConsoleStore";
 import { orderedRepos, useRepoStore } from "./useRepoStore";
 import { useToastStore } from "./useToastStore";
+import { useUiStore } from "./useUiStore";
 
 function runningOf(id: string): boolean | undefined {
   return orderedRepos(useRepoStore.getState()).find((repo) => repo.id === id)?.running;
@@ -162,5 +167,76 @@ describe("購読の状態", () => {
 
     await expect(listenForRepoUpdates()).rejects.toThrow("権限がありません");
     expect(isListeningForRepoUpdates()).toBe(false);
+  });
+});
+
+describe("`.git` の変化", () => {
+  /** 届いたイベントを渡すハンドラを捕まえる */
+  async function subscribe(): Promise<(repoIds: string[]) => void> {
+    let handle: ((repoIds: string[]) => void) | null = null;
+    vi.mocked(onReposChanged).mockImplementation((received) => {
+      handle = received;
+      return Promise.resolve(vi.fn());
+    });
+    await listenForRepoChanges();
+    if (handle === null) throw new Error("ハンドラが渡されていない");
+    return handle;
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    resetRequests();
+    vi.mocked(repos).getRepoSnapshot.mockResolvedValue(makeSnapshot({ id: "r1", revision: 9 }));
+    useRepoStore.setState({
+      byId: new Map(),
+      order: [],
+      loaded: false,
+      loadError: null,
+      running: new Map(),
+    });
+    useRepoStore
+      .getState()
+      .registerAll([registration("r1", "acme-api"), registration("r2", "acme-web")]);
+    useUiStore.setState({ windowVisible: true });
+  });
+
+  /** 変わったリポジトリだけ読む。全件読み直さない (docs/adr/0022-auto-refresh.md) */
+  it("届いたリポジトリだけ取り直す", async () => {
+    const changed = await subscribe();
+
+    changed(["r2"]);
+    await vi.waitFor(() => {
+      expect(vi.mocked(repos).getRepoSnapshot).toHaveBeenCalledWith("r2");
+    });
+
+    expect(vi.mocked(repos).getRepoSnapshot).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * 閉じてもプロセスは残るので、見ていない間もイベントは届く
+   * (docs/adr/0011-residency.md)。**そのたびに git を起こさない**
+   */
+  it("ウィンドウが隠れている間は取り直さない", async () => {
+    const changed = await subscribe();
+    useUiStore.setState({ windowVisible: false });
+
+    changed(["r1"]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(vi.mocked(repos).getRepoSnapshot).not.toHaveBeenCalled();
+  });
+
+  /** 取り直しは操作の側が既にやっている (docs/adr/0009-concurrency-and-refresh.md) */
+  it("実行中のリポジトリは取り直さない", async () => {
+    const changed = await subscribe();
+    useRepoStore.getState().beginRun("r1");
+
+    changed(["r1", "r2"]);
+    await vi.waitFor(() => {
+      expect(vi.mocked(repos).getRepoSnapshot).toHaveBeenCalledWith("r2");
+    });
+
+    expect(vi.mocked(repos).getRepoSnapshot).toHaveBeenCalledOnce();
   });
 });

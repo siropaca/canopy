@@ -1,10 +1,12 @@
 import type { RepoUpdate } from "@/ipc/generated/RepoUpdate";
-import { onRepoSnapshotUpdated } from "@/ipc/events";
+import { onRepoSnapshotUpdated, onReposChanged } from "@/ipc/events";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { noteWindowVisible } from "./consoleActions";
+import { refreshAllRepositories, refreshRepositories } from "./refresh";
 import { recordBulkResult, wasAbandoned } from "./results";
 import { useRepoStore } from "./useRepoStore";
+import { useUiStore } from "./useUiStore";
 
 /*
  * イベントの受け口。
@@ -67,6 +69,24 @@ export async function listenForRepoUpdates(): Promise<UnlistenFn> {
 }
 
 /**
+ * `.git` の変化を受けて取り直す購読を張る。戻り値を呼ぶと外れる。
+ *
+ * **まとめて届く。** 畳むのは Rust 側 (docs/adr/0022-auto-refresh.md)。
+ * ここで受けた分は、実行中でないリポジトリだけ読み直す。
+ *
+ * **隠れている間は捨てる。** 閉じてもプロセスは残るので、見ていない間も
+ * イベントは届き続ける (docs/adr/0011-residency.md)。そのたびに git を
+ * 起こすと、画面に出ない読み取りが走り続ける。前面に戻ったときに全件
+ * 読み直すので取りこぼさない。
+ */
+export function listenForRepoChanges(): Promise<UnlistenFn> {
+  return onReposChanged((repoIds) => {
+    if (!useUiStore.getState().windowVisible) return;
+    void refreshRepositories(repoIds);
+  });
+}
+
+/**
  * ウィンドウが画面に出ているかを追う。
  *
  * 閉じてもプロセスは残るので、隠している間にも結果が届く
@@ -75,10 +95,18 @@ export async function listenForRepoUpdates(): Promise<UnlistenFn> {
  * **`visibilitychange` を使う。** Rust から送ると、こちらが `hide()` した経路しか
  * 拾えない。`Cmd+H`・最小化・別のデスクトップへの切り替えは Tauri のウィンドウ
  * イベントに出てこないが、WebView の可視性としては全部届く (実測)。
+ *
+ * **戻ってきたら取り直す** (docs/adr/0022-auto-refresh.md)。隠れている間に
+ * ターミナルで動かした結果を映す。張った時点では取り直さない。
+ * 起動直後は `loadEverything` が全件読んでいる。
  */
 export function watchWindowVisibility(): () => void {
+  let hidden = false;
   const apply = () => {
-    noteWindowVisible(document.visibilityState === "visible");
+    const visible = document.visibilityState === "visible";
+    noteWindowVisible(visible);
+    if (visible && hidden) void refreshAllRepositories();
+    hidden = !visible;
   };
   // 起動時に既に隠れていることもある
   apply();

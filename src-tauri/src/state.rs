@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use crate::model::WindowState;
 use crate::queue::GitQueue;
 use crate::store::{Registry, RepoPath, UnknownRepo};
+use crate::watch::{Muted, Quiet, Target};
 
 /// Name of the settings file inside the app's config directory.
 pub const SETTINGS_FILE: &str = "canopy.json";
@@ -29,6 +30,11 @@ pub struct AppState {
     /// 何十回も来るので、そのたびに設定ファイルを書くと丸ごと書き直しになる。
     /// 書き出すのは隠したときと終了するとき (docs/adr/0011-residency.md)。
     moved_window: std::sync::Mutex<Option<WindowState>>,
+    /// Repositories we are writing to right now.
+    ///
+    /// `.git` の監視が、自分が起こした変化で取り直さないようにするためのもの
+    /// (docs/adr/0022-auto-refresh.md)。
+    quiet: Quiet,
 }
 
 /// Why the state could not answer.
@@ -58,6 +64,21 @@ impl From<UnknownRepo> for StateError {
     }
 }
 
+/// Holds the write lock and the watcher's silence until it is dropped.
+///
+/// **黙らせる側を先に手放す。** 猶予が始まった時点でまだロックを持っているので、
+/// 他の書き込みが割り込む余地は無い (フィールドは宣言順に落ちる)。
+#[derive(Debug)]
+pub struct WriteSection<'a> {
+    #[allow(dead_code, reason = "生きているあいだ黙らせるためだけに持つ")]
+    mute: Muted<'a>,
+    #[allow(
+        dead_code,
+        reason = "生きているあいだ書き込みを直列にするためだけに持つ"
+    )]
+    lock: tokio::sync::OwnedRwLockWriteGuard<()>,
+}
+
 /// One repository, resolved from its id.
 #[derive(Debug)]
 pub struct Located {
@@ -81,6 +102,7 @@ impl AppState {
             queue: GitQueue::default(),
             initial_window,
             moved_window: std::sync::Mutex::new(None),
+            quiet: Quiet::default(),
         }
     }
 
@@ -119,6 +141,37 @@ impl AppState {
 
     pub fn queue(&self) -> &GitQueue {
         &self.queue
+    }
+
+    pub fn quiet(&self) -> &Quiet {
+        &self.quiet
+    }
+
+    /// Enter the section where this repository may be written to.
+    ///
+    /// **書き込みロックと `.git` の握りつぶしを 1 回で取る。** 別々に取ると、
+    /// 書き込む経路を足したときに握りつぶしだけ忘れて、自分が起こした変化で
+    /// もう一度取り直すことになる (docs/adr/0022-auto-refresh.md)。
+    pub async fn begin_write(&self, key: &Path) -> WriteSection<'_> {
+        // ロックを取ってから黙らせる。待っている間の外の変化は拾ってよい
+        let lock = self.queue.write_lock(key).await;
+        WriteSection {
+            mute: self.quiet.mute(key),
+            lock,
+        }
+    }
+
+    /// What the `.git` watcher should be watching.
+    ///
+    /// **設定が読めないときは空を返す。** 監視が張られないだけで、
+    /// 「更新」と前面復帰の引き金は残る (docs/adr/0022-auto-refresh.md)。
+    pub async fn watch_targets(&self) -> Vec<Target> {
+        self.read(|registry| registry.common_dirs())
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(repo_id, common_dir)| Target::new(repo_id, common_dir))
+            .collect()
     }
 
     pub fn settings_path(&self) -> &Path {
@@ -314,6 +367,52 @@ mod tests {
 
         assert!(matches!(read, Err(StateError::Settings(_))));
         assert!(matches!(write, Err(StateError::Settings(_))));
+    }
+
+    /// 監視の対象は、登録してあるものをそのまま渡す。
+    ///
+    /// **ここが空を返すと `.git` の監視が 1 件も張られない**
+    /// (docs/adr/0022-auto-refresh.md)。画面にも stderr にも何も出ないまま、
+    /// ターミナルの操作が反映されなくなる
+    #[tokio::test]
+    async fn hands_every_registered_repository_to_the_watcher() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let state = AppState::load(directory.path().join("canopy.json"));
+        let mut ids = Vec::new();
+        for name in ["acme-api", "acme-web"] {
+            let id = state
+                .write(|registry| {
+                    registry.add(
+                        name.to_owned(),
+                        PathBuf::from(format!("/repos/{name}")),
+                        PathBuf::from(format!("/repos/{name}/.git")),
+                    )
+                })
+                .await
+                .expect("save should succeed")
+                .expect("the repository is registered");
+            ids.push(id);
+        }
+
+        let targets = state.watch_targets().await;
+
+        assert_eq!(
+            targets,
+            vec![
+                Target::new(ids[0].clone(), PathBuf::from("/repos/acme-api/.git")),
+                Target::new(ids[1].clone(), PathBuf::from("/repos/acme-web/.git")),
+            ]
+        );
+    }
+
+    /// 設定が読めなければ監視だけ張られない。**起動は続ける**
+    #[tokio::test]
+    async fn watches_nothing_when_the_settings_cannot_be_read() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let settings = directory.path().join("canopy.json");
+        std::fs::write(&settings, "{ 壊れている").expect("write");
+
+        assert!(AppState::load(settings).watch_targets().await.is_empty());
     }
 
     /// 知らない id は `UnknownRepo` で返す。文言は store 側の 1 箇所

@@ -199,6 +199,55 @@ describe("メニューの項目から操作への割り振り", () => {
     expect(result.current.dialog).toBeNull();
   });
 
+  /**
+   * force を落とすと、チェックボックスが永久に効かない
+   * (docs/adr/0021-delete-local-branch.md)
+   */
+  it("削除はダイアログで選んだ force をそのまま渡す", () => {
+    const rows = rowsOf();
+    const result = actionsFor(rows);
+    const row = branchRow(rows, "side");
+    if (row.kind !== "branch") throw new Error("ブランチ行ではない");
+    vi.mocked(ops.deleteBranch).mockResolvedValue({
+      kind: "ran",
+      ok: true,
+      steps: [],
+      message: null,
+    });
+
+    act(() => {
+      result.current.openDelete(row);
+    });
+    act(() => {
+      result.current.submitDelete(true);
+    });
+
+    expect(ops.deleteBranch).toHaveBeenCalledExactlyOnceWith("r1", "side", true);
+    expect(result.current.dialog).toBeNull();
+  });
+
+  it("強制を選ばなければ force なしで渡す", () => {
+    const rows = rowsOf();
+    const result = actionsFor(rows);
+    const row = branchRow(rows, "side");
+    if (row.kind !== "branch") throw new Error("ブランチ行ではない");
+    vi.mocked(ops.deleteBranch).mockResolvedValue({
+      kind: "ran",
+      ok: true,
+      steps: [],
+      message: null,
+    });
+
+    act(() => {
+      result.current.openDelete(row);
+    });
+    act(() => {
+      result.current.submitDelete(false);
+    });
+
+    expect(ops.deleteBranch).toHaveBeenCalledExactlyOnceWith("r1", "side", false);
+  });
+
   /** lease を捨てると、強制プッシュのつもりが通常プッシュになる */
   it("プッシュは sha をそのまま渡す", () => {
     const rows = rowsOf();

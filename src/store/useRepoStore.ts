@@ -182,6 +182,17 @@ function withRunning(repo: RepoState, running: boolean): RepoState {
 }
 
 /**
+ * そのリポジトリに実行中の操作があるか。
+ *
+ * **本数から真偽値に変える式はここ 1 本。** 2 箇所で書くと、定義を変えたときに
+ * 片方だけ古くなる。サイドバーは実行中として無効なのに、取り直しは実行中でないと
+ * 判断して読みに行く、という食い違いになる。
+ */
+export function isRunning(state: RepoStoreState, repoId: RepoId): boolean {
+  return (state.running.get(repoId) ?? 0) > 0;
+}
+
+/**
  * 並び順どおりのリポジトリ。**実行中の本数をここで写す。**
  *
  * 写すのを 1 箇所にしておかないと、`RepoState` を作り直す経路を足すたびに
@@ -194,7 +205,7 @@ export function orderedRepos(state: RepoStoreState): RepoState[] {
     const repo = state.byId.get(id);
     if (repo === undefined) continue;
     // 同じ状態なら同じオブジェクトを返す。useShallow の比較を無駄に外さない
-    repos.push(withRunning(repo, (state.running.get(id) ?? 0) > 0));
+    repos.push(withRunning(repo, isRunning(state, id)));
   }
   return repos;
 }

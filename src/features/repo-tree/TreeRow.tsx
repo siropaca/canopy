@@ -11,6 +11,7 @@ import {
   BranchIcon,
   ChevronIcon,
   CurrentBranchIcon,
+  DirtyIcon,
   FolderIcon,
   IconSpacer,
   TagIcon,
@@ -206,7 +207,10 @@ function RepoNote({ row }: { readonly row: RepoRow }) {
       {!row.expanded && (
         <>
           {totals.dirty > 0 && (
-            <span className={classNames(styles.badge, styles.badgeDirty)}>●{totals.dirty}</span>
+            <span className={classNames(styles.badge, styles.badgeDirty)}>
+              <DirtyIcon />
+              {totals.dirty}
+            </span>
           )}
           {totals.behind > 0 && (
             <span className={classNames(styles.badge, styles.badgeBehind)}>

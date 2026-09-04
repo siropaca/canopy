@@ -45,6 +45,8 @@ const VISUAL = [
   "justify-content",
   "text-align",
   "stroke-width",
+  "fill",
+  "stroke",
 ] as const;
 
 interface Pair {
@@ -267,6 +269,18 @@ const PAIRS: readonly Pair[] = [
     module: "features/dialog/Dialog.module.css",
     rule: ".buttons button",
   },
+  // 削除のダイアログ。破壊的な選択の注意 (docs/adr/0021-delete-local-branch.md)
+  {
+    mock: ".modal .lost",
+    module: "features/dialog/DeleteBranchDialog.module.css",
+    rule: ".warning",
+  },
+
+  // ---- アイコン ----
+  // インジケーターの寸法がずれると、丸と矢印の大きさが揃わない (フェーズ 5 で実際にずれた)
+  { mock: "svg.ar", module: "shared/ui/icons.module.css", rule: ".arrow" },
+  { mock: "svg.dt", module: "shared/ui/icons.module.css", rule: ".dot" },
+  { mock: "svg.wti", module: "shared/ui/icons.module.css", rule: ".worktree" },
 
   // ---- スプリッタ ----
   { mock: ".splitter", module: "shared/ui/Splitter.module.css", rule: ".splitter" },
@@ -406,12 +420,14 @@ describe("比べる範囲", () => {
       "justify-content",
       "text-align",
       "stroke-width",
+      "fill",
+      "stroke",
     ]);
   });
 
   it("モックの class を 1 つずつ対応させてある", () => {
     // 減らせば差分は出なくなる。組数を固定して、外したら落とす
-    expect(PAIRS).toHaveLength(71);
+    expect(PAIRS).toHaveLength(75);
   });
 });
 

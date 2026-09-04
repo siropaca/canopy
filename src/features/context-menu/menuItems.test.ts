@@ -125,6 +125,14 @@ describe("他のローカルブランチ", () => {
     ]);
   });
 
+  /**
+   * 削除は v1 に入れた (docs/adr/0021-delete-local-branch.md)。
+   * v2 のグレーではなく、押せる項目にする
+   */
+  it("削除は押せる項目になっている", () => {
+    expect(enabled(items)).toContain("削除");
+  });
+
   it("`⧉` が付いていたらチェックアウトを無効にする", () => {
     const held = makeRepo("r1", {
       local: [
@@ -139,6 +147,8 @@ describe("他のローカルブランチ", () => {
     expect(greyed(items)).toContain("チェックアウト");
     expect(greyed(items)).toContain("チェックアウトとプル");
     expect(enabled(items)).toContain("プル");
+    // git が `used by worktree at` で必ず拒否する
+    expect(greyed(items)).toContain("削除");
   });
 
   it("`gone` のブランチはプルを無効にする", () => {

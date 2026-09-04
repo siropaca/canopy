@@ -1,7 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RepoRegistration } from "@/ipc/generated/RepoRegistration";
+import { makeSnapshot } from "@/test/factories";
+
+vi.mock("@/ipc/repos");
+
+import * as repos from "@/ipc/repos";
+
+import { resetRequests } from "./bootstrap";
 import { watchWindowVisibility } from "./events";
 import { useConsoleStore } from "./useConsoleStore";
+import { useRepoStore } from "./useRepoStore";
 import { useUiStore } from "./useUiStore";
 
 /*
@@ -22,7 +31,24 @@ function setVisibility(state: "visible" | "hidden"): void {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
+function registration(id: string, name: string): RepoRegistration {
+  return { id, name, path: `/repos/${name}` };
+}
+
 beforeEach(() => {
+  vi.mocked(repos).getRepoSnapshot.mockReset();
+  vi.mocked(repos).getRepoSnapshot.mockResolvedValue(makeSnapshot({ id: "r1", revision: 4 }));
+  resetRequests();
+  useRepoStore.setState({
+    byId: new Map(),
+    order: [],
+    loaded: false,
+    loadError: null,
+    running: new Map(),
+  });
+  useRepoStore
+    .getState()
+    .registerAll([registration("r1", "acme-api"), registration("r2", "acme-web")]);
   useConsoleStore.setState({
     blocks: new Map(),
     activeTab: null,
@@ -93,5 +119,57 @@ describe("ウィンドウの可視性", () => {
 
     expect(useConsoleStore.getState().failed.has("r1")).toBe(true);
     stop();
+  });
+});
+
+/*
+ * 前面に戻ったら取り直す (docs/adr/0022-auto-refresh.md)。
+ *
+ * 隠れている間にターミナルで動かした結果を映す。
+ */
+describe("前面に戻ったときの取り直し", () => {
+  it("隠れてから戻ったら全リポジトリを取り直す", async () => {
+    const stop = watchWindowVisibility();
+
+    setVisibility("hidden");
+    setVisibility("visible");
+
+    await vi.waitFor(() => {
+      expect(
+        vi
+          .mocked(repos)
+          .getRepoSnapshot.mock.calls.map(([id]) => id)
+          .sort(),
+      ).toEqual(["r1", "r2"]);
+    });
+    stop();
+  });
+
+  /** 起動直後は `loadEverything` が全件読んでいる。二重に読まない */
+  it("張った時点では取り直さない", () => {
+    const stop = watchWindowVisibility();
+
+    expect(vi.mocked(repos).getRepoSnapshot).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("隠れただけでは取り直さない", () => {
+    const stop = watchWindowVisibility();
+
+    setVisibility("hidden");
+
+    expect(vi.mocked(repos).getRepoSnapshot).not.toHaveBeenCalled();
+    stop();
+  });
+
+  /** 外したあとに戻しても動かない */
+  it("外したら取り直さない", () => {
+    const stop = watchWindowVisibility();
+    setVisibility("hidden");
+    stop();
+
+    setVisibility("visible");
+
+    expect(vi.mocked(repos).getRepoSnapshot).not.toHaveBeenCalled();
   });
 });

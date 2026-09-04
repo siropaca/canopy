@@ -141,6 +141,28 @@ pub async fn push_branch(
     .await?)
 }
 
+/// Delete a local branch.
+///
+/// **既定は `git branch -d`。** マージされていなければ git が拒否するので、
+/// その失敗をそのまま返す (docs/adr/0021-delete-local-branch.md)。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_branch(
+    state: State<'_, AppState>,
+    repo_id: String,
+    name: String,
+    force: bool,
+) -> Result<OpOutcome, CommandError> {
+    Ok(ops::run(
+        &state,
+        &repo_id,
+        &Operation::Delete {
+            branch: name,
+            force,
+        },
+    )
+    .await?)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn rename_branch(
     state: State<'_, AppState>,

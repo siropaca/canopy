@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { useShallow } from "zustand/react/shallow";
 
 import { ConsolePanel } from "@/features/console/ConsolePanel";
 import { ContextMenu } from "@/features/context-menu/ContextMenu";
 import { menuItemsFor } from "@/features/context-menu/menuItems";
+import { DeleteBranchDialog } from "@/features/dialog/DeleteBranchDialog";
 import { PushDialog } from "@/features/dialog/PushDialog";
 import { RenameDialog } from "@/features/dialog/RenameDialog";
 import { DetailPane, type DetailActions } from "@/features/detail/DetailPane";
@@ -12,11 +14,11 @@ import { Sidebar } from "@/features/sidebar/Sidebar";
 import { StatusBar } from "@/features/status-bar/StatusBar";
 import { Toasts } from "@/features/toast/Toasts";
 import { messageOf } from "@/shared/lib/errorMessage";
-import { canFetch, canPull, canRemoveRepo } from "@/shared/lib/selection";
+import { canDelete, canFetch, canPull, canRemoveRepo } from "@/shared/lib/selection";
 import { Splitter } from "@/shared/ui/Splitter";
 import { addRepository, loadEverything, removeRepository } from "@/store/bootstrap";
 import { toggleConsolePanel } from "@/store/consoleActions";
-import { listenForRepoUpdates, watchWindowVisibility } from "@/store/events";
+import { listenForRepoChanges, listenForRepoUpdates, watchWindowVisibility } from "@/store/events";
 import { notifyFailure } from "@/store/notify";
 import {
   checkoutAndPullRow,
@@ -27,6 +29,7 @@ import {
   pullRow,
 } from "@/store/opsActions";
 import { usePersistUiState } from "@/store/persist";
+import { refreshAllRepositories } from "@/store/refresh";
 import { collapseAll, expandAll, expandLocalOnly } from "@/store/treeActions";
 import { bulkFetchRunning, useBulkFetchStore } from "@/store/useBulkFetchStore";
 import { useRepoStore } from "@/store/useRepoStore";
@@ -43,6 +46,34 @@ import { useRowActions } from "./useRowActions";
  * ヘッダーは持たない。詳細ペインは常に表示する。
  */
 
+/**
+ * イベントの購読を 1 つの効果にまとめる。
+ *
+ * **張れなかったら黙らない。** リポジトリ個別の話ではないので、コンソールへの
+ * 導線は付けずにトーストだけ出す。
+ *
+ * `listen` は module のトップレベルの関数だけを渡す。無名関数を渡すと、
+ * 再描画のたびに購読を張り直すことになる。
+ */
+function useSubscription(listen: () => Promise<UnlistenFn>, whenFailed: string): void {
+  useEffect(() => {
+    let stop: UnlistenFn | null = null;
+    let cancelled = false;
+    listen()
+      .then((unlisten) => {
+        if (cancelled) unlisten();
+        else stop = unlisten;
+      })
+      .catch((error: unknown) => {
+        notifyFailure(`${whenFailed}: ${messageOf(error)}`);
+      });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [listen, whenFailed]);
+}
+
 export function App() {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -53,25 +84,12 @@ export function App() {
   // 読み込みが終わるまで保存しない。既定値で上書きしてしまう
   usePersistUiState(loaded);
 
-  // 一括フェッチの結果はイベントで届く。購読の中身は store/events.ts
-  useEffect(() => {
-    let stop: (() => void) | null = null;
-    let cancelled = false;
-    listenForRepoUpdates()
-      .then((unlisten) => {
-        if (cancelled) unlisten();
-        else stop = unlisten;
-      })
-      .catch((error: unknown) => {
-        // 握りつぶさない。リポジトリ個別の話ではないので、コンソールへの導線は付けない。
-        // 購読できていないときは一括フェッチが 1 件ずつ投げる形に落ちる
-        notifyFailure(`更新の通知を受け取れません: ${messageOf(error)}`);
-      });
-    return () => {
-      cancelled = true;
-      stop?.();
-    };
-  }, []);
+  // 一括フェッチの結果はイベントで届く。購読の中身は store/events.ts。
+  // 購読できていないときは一括フェッチが 1 件ずつ投げる形に落ちる
+  useSubscription(listenForRepoUpdates, "一括フェッチの結果を受け取れません");
+  // ターミナルで動かした結果は `.git` の変化として届く
+  // (docs/adr/0022-auto-refresh.md)
+  useSubscription(listenForRepoChanges, "ファイルの変更を受け取れません");
 
   // ウィンドウを閉じてもプロセスは残る。隠れている間に届いた失敗にも
   // 赤いドットを立てるため、可視性を追う (docs/adr/0011-residency.md)
@@ -108,6 +126,12 @@ export function App() {
   const onAddRepo = useCallback(() => {
     void addRepository();
   }, []);
+
+  /** サイドバーの「更新」。フェッチせずに全リポジトリを取り直す */
+  const onRefresh = useCallback(() => {
+    void refreshAllRepositories();
+  }, []);
+
   const onRemoveRepo = useCallback((repoId: string) => {
     void removeRepository(repoId);
   }, []);
@@ -155,9 +179,11 @@ export function App() {
           pullEnabled={canPull(selectedRow)}
           fetchEnabled={canFetch(selectedRow, bulkRunning)}
           removeEnabled={canRemoveRepo(selectedRow)}
+          deleteEnabled={canDelete(selectedRow)}
           groupDirectories={toggles.groupDirectories}
           localOnly={toggles.localOnly}
           consoleOpen={toggles.consoleOpen}
+          onRefresh={onRefresh}
           onFetch={onFetch}
           onPull={onPullSelection}
           onExpandLocal={expandLocalOnly}
@@ -167,6 +193,11 @@ export function App() {
           onRemoveRepo={() => {
             if (canRemoveRepo(selectedRow) && selectedRow !== null) {
               onRemoveRepo(selectedRow.repoId);
+            }
+          }}
+          onDeleteBranch={() => {
+            if (selectedRow?.kind === "branch" && canDelete(selectedRow)) {
+              actions.openDelete(selectedRow);
             }
           }}
           onToggleGroup={toggleGroupDirectories}
@@ -198,6 +229,15 @@ export function App() {
         <RenameDialog
           name={actions.dialog.row.branch.name}
           onRename={actions.submitRename}
+          onCancel={actions.closeDialog}
+        />
+      )}
+
+      {actions.dialog?.kind === "delete" && dialogRepo !== undefined && (
+        <DeleteBranchDialog
+          repoName={dialogRepo.name}
+          branch={actions.dialog.row.branch}
+          onDelete={actions.submitDelete}
           onCancel={actions.closeDialog}
         />
       )}

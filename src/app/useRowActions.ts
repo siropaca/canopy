@@ -17,6 +17,7 @@ import {
   openRepositoryInTerminal,
   pullRow,
   pushBranch,
+  deleteBranch,
   renameBranch,
   revealRepository,
 } from "@/store/opsActions";
@@ -42,6 +43,7 @@ export interface OpenMenu {
 /** いま開いているダイアログ。行は解き直したもの */
 export type OpenDialog =
   | { readonly kind: "rename"; readonly row: BranchRow }
+  | { readonly kind: "delete"; readonly row: BranchRow }
   | {
       readonly kind: "push";
       readonly row: BranchRow;
@@ -60,10 +62,13 @@ export interface RowActions {
   readonly run: (action: MenuAction, row: RowNode) => void;
   readonly openPush: (row: BranchRow) => void;
   readonly openRename: (row: BranchRow) => void;
+  readonly openDelete: (row: BranchRow) => void;
   /** 名前の変更を確定する。成功したら新しい名前の行を選択したままにする */
   readonly submitRename: (newName: string) => void;
   /** プッシュを確定する。`lease` はダイアログで見せていた sha */
   readonly submitPush: (lease: string | null) => void;
+  /** 削除を確定する。`force` なら `git branch -D` */
+  readonly submitDelete: (force: boolean) => void;
 }
 
 /** 開いているものを鍵で覚える。行は `rows` から解き直す */
@@ -73,7 +78,7 @@ interface MenuState {
 }
 
 interface DialogState {
-  readonly kind: "rename" | "push";
+  readonly kind: "rename" | "push" | "delete";
   readonly key: string;
   /** プッシュのときだけ。`null` は読み込み中 */
   readonly preview: PushPreview | null;
@@ -94,9 +99,9 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
     if (dialogState === null) return null;
     const row = rows.find((candidate) => candidate.key === dialogState.key);
     if (row === undefined || row.kind !== "branch") return null;
-    return dialogState.kind === "rename"
-      ? { kind: "rename", row }
-      : { kind: "push", row, preview: dialogState.preview };
+    if (dialogState.kind === "rename") return { kind: "rename", row };
+    if (dialogState.kind === "delete") return { kind: "delete", row };
+    return { kind: "push", row, preview: dialogState.preview };
   }, [rows, dialogState]);
 
   const closeMenu = useCallback(() => {
@@ -111,6 +116,10 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
 
   const openRename = useCallback((row: BranchRow) => {
     setDialogState({ kind: "rename", key: row.key, preview: null });
+  }, []);
+
+  const openDelete = useCallback((row: BranchRow) => {
+    setDialogState({ kind: "delete", key: row.key, preview: null });
   }, []);
 
   /** プッシュダイアログ。コミット一覧は開いてから読む */
@@ -145,6 +154,19 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
     [dialog, closeDialog],
   );
 
+  const submitDelete = useCallback(
+    (force: boolean) => {
+      if (dialog?.kind !== "delete") return;
+      const { row } = dialog;
+      closeDialog();
+      void deleteBranch(row.repoId, row.branch.name, force).then((result) => {
+        // 消したら選択を外す。行がもう無い
+        if (result.ok) useUiStore.getState().select(null);
+      });
+    },
+    [dialog, closeDialog],
+  );
+
   const submitPush = useCallback(
     (lease: string | null) => {
       if (dialog?.kind !== "push") return;
@@ -173,6 +195,9 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
         case "rename":
           if (row.kind === "branch") openRename(row);
           return;
+        case "delete":
+          if (row.kind === "branch") openDelete(row);
+          return;
         case "fetchRepo":
           void fetchRepository(row.repoId);
           return;
@@ -199,7 +224,7 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
           return;
       }
     },
-    [openPush, openRename],
+    [openPush, openRename, openDelete],
   );
 
   return {
@@ -212,7 +237,9 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
     run,
     openPush,
     openRename,
+    openDelete,
     submitRename,
     submitPush,
+    submitDelete,
   };
 }

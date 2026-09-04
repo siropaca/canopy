@@ -86,6 +86,7 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | プッシュ (追跡なし) | `push_branch` | `git push -u origin <名前>` | 追跡ブランチが無いとき。同名で作る |
 | 強制プッシュ | `push_branch` | `git push --force-with-lease=<リモート側の名前>:<sha> <リモート> <名前>:<リモート側の名前>` | `--force` は使わない。**sha を明示する**。ahead が 0 のときは UI 側で禁止する |
 | ブランチ名の変更 | `rename_branch` | `git branch -m <旧> <新>` → `git branch --unset-upstream <新>` | `-m` は `branch.<新>.merge` を旧名のまま残す。追跡を外さないと、プッシュで origin 側に旧名と新名が両方できる。**2 段目は追跡先が残っているときだけ** (無いブランチに撃つと失敗する) |
+| ブランチの削除 | `delete_branch` | `git branch -d <名前>` (`force` なら `-D`) | **既定は `-d`。** マージされていなければ git が拒否する。「マージ済みか」をこちらで判定して分岐すると、判定と実行の間に変わった状態で消す ([../adr/0021-delete-local-branch.md](../adr/0021-delete-local-branch.md)) |
 | 直前のブランチに戻る | `checkout_previous` | `git checkout -` | detached HEAD から戻るときに使う |
 
 プッシュは 3 行あるが IPC は 1 つ。`force_with_lease` の引数で分岐する。  
@@ -175,6 +176,8 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | ref のロック競合 | `unable to update local ref` | 同じリポジトリを二重に登録している可能性があります |
 | 未コミットがあってチェックアウト | `Your local changes ... would be overwritten` | チェックアウトできません (変更が上書きされます) |
 | コンフリクト | `CONFLICT` | 競合しました。手元で解決してください |
+| マージしていないブランチの削除 | `not fully merged` | マージされていません (強制削除にすると消せます) |
+| チェックアウト中のブランチの削除 | `used by worktree at` (`already` は付かない) | チェックアウト中のブランチは削除できません |
 | 認証に失敗 | `Authentication failed` / `Permission denied` | 認証に失敗しました |
 | ネットワーク | `Could not resolve host` / `Could not read from remote` | リモートに接続できませんでした |
 | 応答が無い | 打ち切って kill する | リモートの応答がありません (30 秒で打ち切りました) |

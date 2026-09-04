@@ -195,6 +195,10 @@ export function renameBranch(
   return perform(repoId, () => ipc.renameBranch(repoId, name, newName));
 }
 
+export function deleteBranch(repoId: RepoId, name: string, force: boolean): Promise<CommandResult> {
+  return perform(repoId, () => ipc.deleteBranch(repoId, name, force));
+}
+
 /**
  * プッシュダイアログに出すものを読む。
  *

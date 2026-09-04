@@ -10,6 +10,9 @@ import { Tooltip } from "./Tooltip";
  * フェッチは選択があればそのリポジトリ、無ければ全リポジトリ (docs/specs/ui.md)。
  * **一括フェッチの最中は無効。** 有効条件は `shared/lib/selection.ts` が決める。
  *
+ * 「更新」は常に有効。状態を取り直すだけでネットワークを触らないので、
+ * 実行中でも押せる (飛ばす判定は `store/refresh.ts`)。
+ *
  * ツールチップは自前の吹き出し (Tooltip.tsx)。`title` は持たせない。
  * 持たせると OS のツールチップと二重に出る。
  */
@@ -21,9 +24,12 @@ interface SidebarProps {
   readonly fetchEnabled: boolean;
   /** 「リストから削除」を有効にできるか (shared/lib/selection.ts) */
   readonly removeEnabled: boolean;
+  /** 「ブランチの削除」を有効にできるか (shared/lib/selection.ts) */
+  readonly deleteEnabled: boolean;
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
+  readonly onRefresh: () => void;
   readonly onFetch: () => void;
   readonly onPull: () => void;
   readonly onExpandLocal: () => void;
@@ -31,6 +37,7 @@ interface SidebarProps {
   readonly onCollapseAll: () => void;
   readonly onAddRepo: () => void;
   readonly onRemoveRepo: () => void;
+  readonly onDeleteBranch: () => void;
   readonly onToggleGroup: () => void;
   readonly onToggleLocalOnly: () => void;
   readonly onToggleConsole: () => void;
@@ -40,9 +47,11 @@ export function Sidebar({
   pullEnabled,
   fetchEnabled,
   removeEnabled,
+  deleteEnabled,
   groupDirectories,
   localOnly,
   consoleOpen,
+  onRefresh,
   onFetch,
   onPull,
   onExpandLocal,
@@ -50,6 +59,7 @@ export function Sidebar({
   onCollapseAll,
   onAddRepo,
   onRemoveRepo,
+  onDeleteBranch,
   onToggleGroup,
   onToggleLocalOnly,
   onToggleConsole,
@@ -59,8 +69,11 @@ export function Sidebar({
       <Button label="新規ブランチ" v2>
         <icons.NewBranch />
       </Button>
-      <Button label="ブランチの削除" v2>
+      <Button label="ブランチの削除" disabled={!deleteEnabled} onClick={onDeleteBranch}>
         <icons.DeleteBranch />
+      </Button>
+      <Button label="更新" onClick={onRefresh}>
+        <icons.Refresh />
       </Button>
       <Button label="フェッチ" disabled={!fetchEnabled} onClick={onFetch}>
         <icons.Fetch />

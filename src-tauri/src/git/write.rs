@@ -61,6 +61,11 @@ pub enum Operation {
     },
     /// `git branch -m` のあと `git branch --unset-upstream`
     Rename { from: String, to: String },
+    /// `git branch -d`。`force` なら `-D`
+    ///
+    /// **既定は `-d`。** マージされていなければ git が拒否するので、その失敗を
+    /// そのまま見せる (docs/adr/0021-delete-local-branch.md)。
+    Delete { branch: String, force: bool },
 }
 
 impl Operation {
@@ -86,6 +91,7 @@ impl Operation {
                 }
             }
             Self::Rename { .. } => OpKind::Rename,
+            Self::Delete { .. } => OpKind::Delete,
         }
     }
 }
@@ -110,6 +116,7 @@ pub async fn run_operation(dir: &RepoPath, op: &Operation) -> Result<CommandResu
             force_with_lease,
         } => push(dir, branch, force_with_lease.as_deref()).await,
         Operation::Rename { from, to } => rename(dir, from, to).await,
+        Operation::Delete { branch, force } => delete(dir, branch, *force).await,
     }
 }
 
@@ -338,6 +345,27 @@ async fn push(
             Arg::Fixed("--end-of-options"),
             Arg::Value(&remote),
             Arg::Value(&refspec),
+        ],
+    )
+    .await
+}
+
+/// Delete a local branch.
+///
+/// **`-d` と `-D` の出し分けだけ。** 「マージ済みか」をこちらで判定して分岐すると、
+/// 判定と実行の間に変わった状態で消すことになる。git に聞いて拒否させる
+/// (docs/adr/0021-delete-local-branch.md)。
+async fn delete(dir: &RepoPath, branch: &str, force: bool) -> Result<CommandResult, GitError> {
+    let name = RefName::branch(dir, branch).await?;
+    let flag = if force { "-D" } else { "-d" };
+    one(
+        dir,
+        OpKind::Delete,
+        &[
+            Arg::Fixed("branch"),
+            Arg::Fixed(flag),
+            Arg::Fixed("--end-of-options"),
+            Arg::Ref(&name),
         ],
     )
     .await

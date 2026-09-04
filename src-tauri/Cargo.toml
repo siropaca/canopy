@@ -33,6 +33,9 @@ libc = "0.2"
 # io-util は打ち切っても出力を残すために自分でパイプを読むのに要る
 # (process だけでは入らない)
 tokio = { version = "1", features = ["io-util", "macros", "process", "sync", "time"] }
+# `.git` を監視して、ターミナルでの操作を画面に映す (docs/adr/0022-auto-refresh.md)。
+# macOS では FSEvents を使う
+notify = "8"
 # Rust の struct から TypeScript の型を生成する (docs/adr/0013-type-generation.md)
 ts-rs = "12"
 

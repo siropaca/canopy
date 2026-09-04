@@ -49,6 +49,8 @@ pub enum OpKind {
     ForcePush,
     /// `git branch -m`
     Rename,
+    /// `git branch -d` / `git branch -D` (docs/adr/0021-delete-local-branch.md)
+    Delete,
 }
 
 impl OpKind {
@@ -72,9 +74,12 @@ impl OpKind {
     pub fn deadline(self) -> Duration {
         match self {
             Self::Fetch | Self::FastForward | Self::Push | Self::ForcePush => NETWORK_TIMEOUT,
-            Self::Pull | Self::Checkout | Self::CheckoutTag | Self::Previous | Self::Rename => {
-                LONG_TIMEOUT
-            }
+            Self::Pull
+            | Self::Checkout
+            | Self::CheckoutTag
+            | Self::Previous
+            | Self::Rename
+            | Self::Delete => LONG_TIMEOUT,
         }
     }
 }

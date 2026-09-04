@@ -8,6 +8,7 @@ use crate::git::{common_dir, toplevel};
 use crate::model::{AddRepoOutcome, RepoRegistration, UiState};
 use crate::state::AppState;
 use crate::store::RepoPath;
+use crate::watch_registered;
 
 /*
  * 設定の読み書きと、リポジトリの追加・削除。
@@ -44,9 +45,18 @@ pub async fn save_ui_state(
 }
 
 /// Forget a repository. ディスクには触らない。
+///
+/// **監視も外す。** 外さないと、消したリポジトリの `.git` を見続ける
+/// (docs/adr/0022-auto-refresh.md)。
 #[tauri::command(rename_all = "snake_case")]
-pub async fn remove_repo(state: State<'_, AppState>, repo_id: String) -> Result<(), CommandError> {
-    Ok(state.write(|registry| registry.remove(&repo_id)).await?)
+pub async fn remove_repo<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    repo_id: String,
+) -> Result<(), CommandError> {
+    state.write(|registry| registry.remove(&repo_id)).await?;
+    watch_registered(&app).await;
+    Ok(())
 }
 
 /// Open the folder picker and register what the user chose.
@@ -84,13 +94,17 @@ pub async fn add_repo<R: Runtime>(
         .await?;
 
     match registered {
-        Ok(id) => Ok(AddRepoOutcome::Added {
-            repo: RepoRegistration {
-                id,
-                name,
-                path: path.to_string_lossy().into_owned(),
-            },
-        }),
+        Ok(id) => {
+            // 増えた 1 件も監視する (docs/adr/0022-auto-refresh.md)
+            watch_registered(&app).await;
+            Ok(AddRepoOutcome::Added {
+                repo: RepoRegistration {
+                    id,
+                    name,
+                    path: path.to_string_lossy().into_owned(),
+                },
+            })
+        }
         Err(error) => Ok(reject(&app, error.to_string())),
     }
 }

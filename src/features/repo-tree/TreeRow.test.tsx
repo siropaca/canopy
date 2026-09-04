@@ -15,8 +15,32 @@ import {
   makeWorktree,
 } from "@/test/factories";
 
+import { AheadIcon, BehindIcon, DirtyIcon } from "@/shared/ui/icons";
+
 import { TreeRow } from "./TreeRow";
 import styles from "./TreeRow.module.css";
+
+/**
+ * そのアイコンが描く形。
+ *
+ * **形で見分ける。** 「svg があること」だけだと、behind と ahead を
+ * 取り違えても通る (docs/testing.md の「『違うこと』しか見ていない比較」)。
+ * 期待値は本物のアイコンから取るので、形を変えてもテストは追随する。
+ */
+function shapeOf(node: Element | null): string {
+  if (node === null) throw new Error("アイコンが無い");
+  return [...node.querySelectorAll("path, circle")]
+    .map((part) => part.getAttribute("d") ?? part.getAttribute("r") ?? "")
+    .join("|");
+}
+
+/** 単体で描いたアイコンの形 */
+function iconShape(icon: () => React.ReactElement): string {
+  const { container, unmount } = render(icon());
+  const shape = shapeOf(container.querySelector("svg"));
+  unmount();
+  return shape;
+}
 
 /** 全部開いた状態の行を作る */
 function rowsOf(snapshot: Partial<RepoSnapshot>): RowNode[] {
@@ -81,7 +105,7 @@ describe("ブランチ行", () => {
       "追跡ブランチが消えている",
       "ワークツリー side にチェックアウト済み",
     ]);
-    expect(element.textContent).toBe("side●231goneside");
+    expect(element.textContent).toBe("side231goneside");
   });
 
   it("0 のインジケーターは出さない", () => {
@@ -102,7 +126,37 @@ describe("ブランチ行", () => {
 
     renderRow(row);
 
-    expect(screen.getByTitle("未コミット 1 ファイル").textContent).toBe("●1");
+    // 丸は SVG なので文字には出ない
+    expect(screen.getByTitle("未コミット 1 ファイル").textContent).toBe("1");
+  });
+
+  /**
+   * **3 つとも「アイコン + 数字」の同じ形にする。**
+   * 未コミットだけ文字の `●` にすると、大きさがフォント任せになり、
+   * 数字との間隔 (`gap`) も入らないので矢印と揃わない
+   */
+  it("インジケーターは 3 つとも アイコン + 数字 の形で並ぶ", () => {
+    const rows = rowsOf({
+      local: [makeBranch("main", { is_current: true, behind: 3, ahead: 1 })],
+      changes: makeChanges(["a.ts", "b.ts"]),
+    });
+    const row = findRow(rows, (candidate) => candidate.kind === "branch");
+
+    renderRow(row);
+
+    const expected = {
+      "未コミット 2 ファイル": iconShape(DirtyIcon),
+      "3 コミット遅れている": iconShape(BehindIcon),
+      "1 コミット進んでいる": iconShape(AheadIcon),
+    };
+    for (const [label, shape] of Object.entries(expected)) {
+      const indicator = screen.getByTitle(label);
+      expect(indicator.querySelector("svg"), `${label} がアイコンを持たない`).not.toBeNull();
+      // アイコンと数字が別の子。同じ節に混ぜると gap が効かない
+      expect(indicator.childNodes.length, `${label} の子の数`).toBe(2);
+      // **どのアイコンかまで見る。** 矢印の向きが逆でも気づけるように
+      expect(shapeOf(indicator.querySelector("svg")), `${label} のアイコン`).toBe(shape);
+    }
   });
 
   it("長い名前はホバーで完全な名前を出す", () => {
@@ -172,7 +226,7 @@ describe("リポジトリ見出し", () => {
     });
 
     // ●1 / ↙9 / ↗2 の順。矢印は SVG なので数字だけが文字になる
-    expect(renderRow(collapsed[0]!).element.textContent).toBe("acme-api●192");
+    expect(renderRow(collapsed[0]!).element.textContent).toBe("acme-api192");
     expect(renderRow(expanded[0]!).element.textContent).toBe("acme-api");
   });
 

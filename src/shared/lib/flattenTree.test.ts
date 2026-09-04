@@ -64,7 +64,11 @@ describe("flatten", () => {
     expect(rows.every((row) => row.kind === "repo")).toBe(true);
   });
 
-  it("開いた括りの中身を出す。ディレクトリが先、葉が後", () => {
+  /**
+   * **葉が先、ディレクトリが後。** 毎日見るのはルート直下の `main` / `develop` で、
+   * ディレクトリを先に出すとその下に沈む (docs/specs/ui.md の「ツリー」)
+   */
+  it("開いた括りの中身を出す。葉が先、ディレクトリが後", () => {
     const repo = makeRepo("r1", {
       local: [makeBranch("main"), makeBranch("feature/b"), makeBranch("feature/a")],
     });
@@ -74,10 +78,50 @@ describe("flatten", () => {
     expect(outline(rows)).toEqual([
       "repo:acme-api",
       "  section:ローカル",
+      "    branch:main",
       "    directory:feature",
       "      branch:a",
       "      branch:b",
-      "    branch:main",
+    ]);
+  });
+
+  /** ディレクトリどうしも名前順。数字は数として比べる (docs/specs/ui.md) */
+  it("ディレクトリも名前順に並ぶ", () => {
+    const repo = makeRepo("r1", {
+      local: [
+        makeBranch("release/x"),
+        makeBranch("feat/x"),
+        makeBranch("rec-10/x"),
+        makeBranch("rec-2/x"),
+        makeBranch("fix/x"),
+      ],
+    });
+
+    const rows = flatten([repo], options({ expanded: expandedFor(repo) }));
+
+    expect(rows.filter((row) => row.kind === "directory").map((row) => row.label)).toEqual([
+      "feat",
+      "fix",
+      "rec-2",
+      "rec-10",
+      "release",
+    ]);
+  });
+
+  /** 入れ子の中でも同じ順序にする */
+  it("ディレクトリの中でも葉が先", () => {
+    const repo = makeRepo("r1", {
+      local: [makeBranch("feat/x"), makeBranch("feat/deep/y"), makeBranch("feat/a")],
+    });
+
+    const rows = flatten([repo], options({ expanded: expandedFor(repo) }));
+
+    expect(outline(rows).slice(2)).toEqual([
+      "    directory:feat",
+      "      branch:a",
+      "      branch:x",
+      "      directory:deep",
+      "        branch:y",
     ]);
   });
 
@@ -193,10 +237,11 @@ describe("flatten", () => {
     const rows = flatten([repo], options({ expanded: expandedFor(repo) }));
 
     const branches = rows.filter((row) => row.kind === "branch");
+    // ルート直下の `main` が先、そのあとに `dev/` の中身
     expect(branches.map((row) => [row.label, row.dirtyCount, row.worktreeName])).toEqual([
+      ["main", 2, null],
       ["idle", 0, null],
       ["side", 1, "side"],
-      ["main", 2, null],
     ]);
   });
 

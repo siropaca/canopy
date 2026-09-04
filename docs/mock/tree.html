@@ -73,6 +73,7 @@ svg.cu{color:var(--cur);stroke-width:1.2}
 svg.tg{color:var(--icon)}
 svg.wti{color:var(--wt);width:11px;height:11px;flex:0 0 11px}
 svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
+svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
 
 .main{display:flex;flex-direction:column;height:calc(100vh - 20px)}
 .split{display:flex;flex:1;min-height:0}
@@ -228,6 +229,7 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
   flex:0 0 auto}
 .modal .clist .c .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .modal .clist .none{color:var(--disabled)}
+.modal .lost{color:var(--dirty);margin-top:8px}
 .modal .cbrow{display:flex;align-items:center;gap:8px;margin-top:14px}
 .modal .cbrow input{width:15px;height:15px;accent-color:var(--accent);margin:0}
 .modal .cbrow .note{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:12px}
@@ -264,8 +266,10 @@ svg.ar{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35}
   <div class="strip" id="strip">
     <button class="sb off" data-v2 data-a="new-branch" data-tip="新規ブランチ">
       <svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
-    <button class="sb off" data-v2 data-a="delete-branch" data-tip="ブランチの削除">
+    <button class="sb off" data-a="delete-branch" data-tip="ブランチの削除">
       <svg viewBox="0 0 16 16"><path d="M3.5 4.8h9M6.2 4.8V3.2h3.6v1.6M5.2 4.8 6 13h4l.8-8.2"/></svg></button>
+    <button class="sb" data-a="refresh" data-tip="更新">
+      <svg viewBox="0 0 16 16"><path d="M11.5 4.5A5 5 0 1 1 8 3"/><path d="M6.4 1.6 8 3 6.4 4.4"/></svg></button>
     <button class="sb" data-a="fetch-strip" data-tip="フェッチ">
       <svg viewBox="0 0 16 16"><path d="M13 3.5 5.6 10.9" stroke-dasharray="2.4 1.9"/><path d="M5.6 7.1v3.8h3.8"/></svg></button>
     <button class="sb off" data-a="pull-selected" data-tip="選択対象をプル">
@@ -326,6 +330,7 @@ const IC={
   cur:`<svg class="cu" viewBox="0 0 12 12"><path d="M6.6 1.4h4v4l-5.1 5.1-4-4z"/><circle cx="8.7" cy="3.3" r=".95"/></svg>`,
   tag:`<svg class="tg" viewBox="0 0 12 12"><path d="M1.5 6 5.2 2.2h5.3v7.6H5.2z"/><circle cx="8.2" cy="6" r=".95"/></svg>`,
   wt:n=>`<span class="wtm"><svg class="wti" viewBox="0 0 12 12"><path d="M1.4 3.4h6.2v6.2H1.4z"/><path d="M4.4 3.4V1.4h6.2v6.2h-2"/></svg><span class="wn">${esc(n)}</span></span>`,
+  dot:`<svg class="dt" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>`,
   down:`<svg class="ar" viewBox="0 0 12 12"><path d="M9.3 2.7 4.2 7.8"/><path d="M4.2 5.2v2.6h2.6"/></svg>`,
   up:`<svg class="ar" viewBox="0 0 12 12"><path d="M2.7 9.3 7.8 4.2"/><path d="M7.8 6.8V4.2H5.2"/></svg>`,
 };
@@ -427,22 +432,26 @@ function section(r,scope,label,items){
 }
 const push=(html,meta)=>{ flat.push(meta); return html.replace("<div ",`<div data-i="${flat.length-1}" `); };
 
+// 名前順。数字は数として比べる (rec-2 が rec-10 より先)
+const NAMES=new Intl.Collator("ja",{numeric:true});
+
+// 葉が先、ディレクトリが後。ルート直下の main / develop を上に出す
 function rows(r,scope,node,depth,prefix){
   let h="";
-  for(const [name,child] of [...node.dirs.entries()].sort((a,b)=>a[0].localeCompare(b[0]))){
+  for(const b of node.leaves.sort((a,b)=>NAMES.compare(a.label,b.label))){
+    const icon=b.cur?IC.cur:scope==="tag"?IC.tag:IC.branch;
+    h+=push(`<div class="r" style="--d:${depth}">${IC.ph}${icon}
+        <span class="nm" title="${esc(b.name)}">${esc(b.label)}</span>
+        ${b.dirtyN?`<span class="dirtyw" title="未コミット ${b.dirtyN} ファイル">${IC.dot}${b.dirtyN}</span>`:""}${TK(b)}
+        ${b.gone?'<span class="gone">gone</span>':""}${b.wtName?IC.wt(b.wtName):""}</div>`,
+        {id:`${r.n}|${scope}|b|${b.name}`,kind:scope,repo:r,branch:b});
+  }
+  for(const [name,child] of [...node.dirs.entries()].sort((a,b)=>NAMES.compare(a[0],b[0]))){
     const key=`${r.n}|${scope}|${prefix}${name}`, open=isOpen(key);
     h+=push(`<div class="r" style="--d:${depth}">${IC.chev(open)}${IC.folder}
         <span class="nm">${esc(name)}</span></div>`,
         {id:key,kind:"folder",repo:r,key});
     if(open) h+=rows(r,scope,child,depth+1,`${prefix}${name}/`);
-  }
-  for(const b of node.leaves.sort((a,b)=>a.label.localeCompare(b.label))){
-    const icon=b.cur?IC.cur:scope==="tag"?IC.tag:IC.branch;
-    h+=push(`<div class="r" style="--d:${depth}">${IC.ph}${icon}
-        <span class="nm" title="${esc(b.name)}">${esc(b.label)}</span>
-        ${b.dirtyN?`<span class="dirtyw" title="未コミット ${b.dirtyN} ファイル">●${b.dirtyN}</span>`:""}${TK(b)}
-        ${b.gone?'<span class="gone">gone</span>':""}${b.wtName?IC.wt(b.wtName):""}</div>`,
-        {id:`${r.n}|${scope}|b|${b.name}`,kind:scope,repo:r,branch:b});
   }
   return h;
 }
@@ -455,7 +464,7 @@ function render(){
     h+=`<div class="block">`;                        // 見出しの sticky をこの中で閉じる
     h+=push(`<div class="r repo${n?"":" nohit"}" draggable="true" data-repo="${esc(r.n)}" style="--d:0">
       ${IC.chev(open)}<span class="nm">${esc(r.n)}</span><span class="sp"></span>
-      ${open?"":`${r.dirty?`<span class="badge d">●${r.dirty}</span>`:""}
+      ${open?"":`${r.dirty?`<span class="badge d">${IC.dot}${r.dirty}</span>`:""}
       ${behindSum(r)?`<span class="badge b">${IC.down}${behindSum(r)}</span>`:""}
       ${aheadSum(r)?`<span class="badge a">${IC.up}${aheadSum(r)}</span>`:""}`}</div>`,
       {id:key,kind:"repo",repo:r,key});
@@ -493,6 +502,9 @@ function paintSel(){
     ?.classList.toggle("off",kind!=="repo");
   strip.querySelector('.sb[data-a="pull-selected"]')
     ?.classList.toggle("off",!(kind==="repo"||kind==="local"));
+  const b=flat[i]?.branch;
+  strip.querySelector('.sb[data-a="delete-branch"]')
+    ?.classList.toggle("off",!(kind==="local"&&b&&!b.cur&&!b.wtName));
   renderDetail();
 }
 const setSel=(id,scroll)=>{
@@ -682,6 +694,7 @@ function act(a){
     },
     "push-branch":()=>openPush(m),
     "fetch-strip":()=>r?run(`git fetch --prune`,R):D.forEach(x=>run(`git fetch --prune`,x.n)),
+    "refresh":()=>render(),                    // 実物は全リポジトリの状態を取り直す (フェッチはしない)
     "toggle-group":()=>{
       grouping=!grouping;
       strip.querySelector('.sb[data-a="toggle-group"]').classList.toggle("on",grouping);
@@ -705,6 +718,7 @@ function act(a){
     "add-repo":()=>run(`# フォルダを選択してリポジトリを追加`,""),
     "remove-repo":()=>removeRepo(r),
     "rename-branch":()=>openRename(m),
+    "delete-branch":()=>openDelete(m),
   }[a]||(()=>{}))();
 }
 function removeRepo(r){
@@ -729,6 +743,40 @@ function openDialog({title,body,ok,onOk,focus,wide}){
   if(focus){ const el=document.getElementById(focus); el?.focus(); el?.select?.(); }
 }
 function closeDialog(){ document.getElementById("modal").hidden=true; dlgOk=null; }
+
+// 既定は `git branch -d`。強制は選んだときだけ (docs/adr/0021-delete-local-branch.md)
+function openDelete(m){
+  const b=m.branch;
+  // 押せるのは他のローカルブランチだけ (docs/specs/ui.md の「ブランチの削除」)
+  if(!b||m.kind!=="local"||b.cur||b.wtName) return;
+  const note=!b.upstream?"ローカルだけのブランチです"
+    :b.gone?`追跡先の origin/${esc(b.name)} は削除済みです`
+    :b.ahead?`origin/${esc(b.name)} より ${b.ahead} コミット進んでいます`
+    :`origin/${esc(b.name)} を追跡しています`;
+  openDialog({
+    title:`ブランチ ${b.name} を削除`,
+    body:`<div class="pinfo">${esc(m.repo.n)} の ${note}</div>
+      <div class="cbrow"><input type="checkbox" id="dforce">
+        <label for="dforce">マージされていなくても削除</label>
+        <span class="note">-D</span></div>
+      <div class="lost" id="dlost" hidden>マージしていないコミットも一緒に消えます。元に戻せません</div>`,
+    ok:"削除",
+    onOk:()=>{
+      const force=document.getElementById("dforce").checked;
+      const i=m.repo.local.findIndex(x=>x.name===b.name);
+      if(i>=0) m.repo.local.splice(i,1);
+      run(`git branch ${force?"-D":"-d"} ${b.name}`,m.repo.n);
+      selId=null; closeDialog(); render();
+    },
+  });
+  // 強制を選んだらボタンも警告色にして、失われるものを出す
+  document.getElementById("dforce").addEventListener("change",e=>{
+    const btn=document.getElementById("mok");
+    btn.textContent=e.target.checked?"強制削除":"削除";
+    btn.classList.toggle("warn",e.target.checked);
+    document.getElementById("dlost").hidden=!e.target.checked;
+  });
+}
 
 /* ブランチ名の変更 */
 function openRename(m){
@@ -838,7 +886,7 @@ function menuFor(m){
     {l:"ブランチ名をコピー",a:"copy-branch"},
     {l:"名前の変更",a:"rename-branch"},
     {hr:1},
-    {l:"削除",off:1},
+    {l:"削除",a:"delete-branch"},
   ];
   if(m.kind==="tag") return [
     {l:"チェックアウト",a:"checkout-tag"},

@@ -13,6 +13,7 @@ fn generic(kind: OpKind) -> &'static str {
         OpKind::Push => "プッシュに失敗しました",
         OpKind::ForcePush => "強制プッシュに失敗しました",
         OpKind::Rename => "名前の変更に失敗しました",
+        OpKind::Delete => "ブランチの削除に失敗しました",
     }
 }
 
@@ -69,6 +70,16 @@ pub fn describe(kind: OpKind, output: &GitOutput) -> String {
     if text.contains("cannot pull with rebase") {
         return "プルに失敗しました (未コミットの変更あり)".to_owned();
     }
+    // **削除は「次の手」まで出す。** git が止めているのは正しいので、
+    // 強制に落とさずに選ばせる (docs/adr/0021-delete-local-branch.md)
+    if text.contains("not fully merged") {
+        return "マージされていません (強制削除にすると消せます)".to_owned();
+    }
+    // **`already` が付かない。** チェックアウトの拒否 (`already used by worktree at`) と
+    // 文字列が重なるので、操作の種別で閉じる (実測: git 2.50)
+    if kind == OpKind::Delete && text.contains("used by worktree at") {
+        return "チェックアウト中のブランチは削除できません".to_owned();
+    }
     if text.contains("stale info") {
         return "リモートが更新されています。フェッチしてやり直してください".to_owned();
     }
@@ -109,6 +120,42 @@ mod tests {
             stderr: stderr.to_owned(),
             timed_out: false,
         }
+    }
+
+    /// マージされていないブランチの削除は git が止める。
+    /// **次の手 (強制削除) が分かる文言にする** (docs/adr/0021-delete-local-branch.md)
+    #[test]
+    fn tells_how_to_delete_an_unmerged_branch() {
+        let output = failed(
+            "error: the branch 'topic' is not fully merged.\n\
+             hint: If you are sure you want to delete it, run 'git branch -D topic'.\n",
+        );
+
+        assert_eq!(
+            describe(OpKind::Delete, &output),
+            "マージされていません (強制削除にすると消せます)"
+        );
+    }
+
+    /// チェックアウト中のブランチは消せない。**別のワークツリーの文言とは別**
+    #[test]
+    fn reports_a_branch_that_is_checked_out() {
+        let output =
+            failed("error: cannot delete branch 'main' used by worktree at '/repos/acme'\n");
+
+        assert_eq!(
+            describe(OpKind::Delete, &output),
+            "チェックアウト中のブランチは削除できません"
+        );
+    }
+
+    /// 専用の文言が無い削除の失敗も、何が失敗したかは出す
+    #[test]
+    fn names_the_operation_when_a_delete_fails_for_another_reason() {
+        assert_eq!(
+            describe(OpKind::Delete, &failed("error: something else\n")),
+            "ブランチの削除に失敗しました"
+        );
     }
 
     /// フェッチしていないときの拒否は `(fetch first)` になる (実測)。

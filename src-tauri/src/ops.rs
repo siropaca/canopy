@@ -63,9 +63,12 @@ pub async fn read_snapshot(state: &AppState, repo_id: &str) -> Result<RepoSnapsh
 /// 2. 同種操作の重複排除
 /// 3. ネットワークの枠 (**ロックの前に取る。** ロックを持って待つと、
 ///    一括フェッチ中に同じリポジトリのチェックアウトが待たされる)
-/// 4. 書き込みロック
+/// 4. 書き込みロックと `.git` の握りつぶし (`AppState::begin_write` が 1 回で取る)
 /// 5. 実行 (参照名の検証は `git::run_operation` の中)
 /// 6. **同じロックの中で**取り直し
+///
+/// 4 から 6 の間は `.git` の監視を黙らせる。取り直しが二重に走るのを避ける
+/// (docs/adr/0022-auto-refresh.md)。
 pub async fn run(state: &AppState, repo_id: &str, op: &Operation) -> Result<OpOutcome, OpError> {
     let located = state.locate(repo_id).await?;
     let kind = op.kind();
@@ -84,7 +87,9 @@ pub async fn run(state: &AppState, repo_id: &str, op: &Operation) -> Result<OpOu
     } else {
         None
     };
-    let _exclusive = state.queue().write_lock(&located.common_dir).await;
+    // 書き込みロックと、`.git` の監視の握りつぶしを 1 回で取る。
+    // **ここから起きる変化は自分の分** (docs/adr/0022-auto-refresh.md)
+    let _section = state.begin_write(&located.common_dir).await;
 
     let result = git::run_operation(&located.dir, op).await?;
     // **成否に関係なく**取り直す。失敗時こそ状態がずれる。

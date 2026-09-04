@@ -11,7 +11,7 @@ const COMMAND_RS = ["settings", "snapshot", "ops"].map((name) =>
   fileURLToPath(new URL(`../../src-tauri/src/commands/${name}.rs`, import.meta.url)),
 );
 /** イベント名の定数を置いているファイル。増やしたらここに足す */
-const EVENT_RS = ["commands/ops.rs"].map((name) =>
+const EVENT_RS = ["commands/ops.rs", "watch.rs"].map((name) =>
   fileURLToPath(new URL(`../../src-tauri/src/${name}`, import.meta.url)),
 );
 /** invoke を呼んでいるラッパ */

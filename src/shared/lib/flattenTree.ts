@@ -181,31 +181,15 @@ interface EmitContext {
   readonly isOpen: (key: string) => boolean;
 }
 
-/** ディレクトリを先に、葉を後に。どちらも名前で辞書順 (docs/specs/ui.md) */
+/**
+ * 葉を先に、ディレクトリを後に。どちらも名前で辞書順 (docs/specs/ui.md)。
+ *
+ * **ディレクトリを先に出すと、ルート直下の `main` / `develop` が下に沈む。**
+ * 毎日見るのはそちらなので、葉を上に出す。
+ */
 function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
   const { depth, prefix, scope, snapshot, running, isOpen } = context;
   const repoId = snapshot.id;
-
-  const directories = [...node.directories.entries()].sort(([left], [right]) =>
-    collator.compare(left, right),
-  );
-  for (const [name, child] of directories) {
-    const path = prefix === "" ? name : `${prefix}/${name}`;
-    const key = directoryKey(repoId, scope, path);
-    rows.push({
-      kind: "directory",
-      key,
-      depth: clampDepth(depth),
-      repoId,
-      running,
-      scope,
-      label: name,
-      expanded: isOpen(key),
-    });
-    if (isOpen(key)) {
-      emit(rows, child, { ...context, depth: depth + 1, prefix: path });
-    }
-  }
 
   const leaves = [...node.leaves].sort((left, right) => collator.compare(left.label, right.label));
   for (const leaf of leaves) {
@@ -234,6 +218,27 @@ function emit(rows: RowNode[], node: Node<Item>, context: EmitContext): void {
       reference: leaf.item,
       label: leaf.label,
     });
+  }
+
+  const directories = [...node.directories.entries()].sort(([left], [right]) =>
+    collator.compare(left, right),
+  );
+  for (const [name, child] of directories) {
+    const path = prefix === "" ? name : `${prefix}/${name}`;
+    const key = directoryKey(repoId, scope, path);
+    rows.push({
+      kind: "directory",
+      key,
+      depth: clampDepth(depth),
+      repoId,
+      running,
+      scope,
+      label: name,
+      expanded: isOpen(key),
+    });
+    if (isOpen(key)) {
+      emit(rows, child, { ...context, depth: depth + 1, prefix: path });
+    }
   }
 }
 

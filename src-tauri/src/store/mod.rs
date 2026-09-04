@@ -289,6 +289,20 @@ impl Registry {
             .map(|repo| repo.common_dir.clone())
     }
 
+    /// Every repository's id and `--git-common-dir`, in display order.
+    ///
+    /// `.git` の監視の対象に使う (docs/adr/0022-auto-refresh.md)。
+    /// **並び順に従う。** `registrations()` と同じ集合を返す。
+    pub fn common_dirs(&self) -> Vec<(String, PathBuf)> {
+        self.registrations()
+            .into_iter()
+            .filter_map(|repo| {
+                self.common_dir_of(&repo.id)
+                    .map(|common_dir| (repo.id, common_dir))
+            })
+            .collect()
+    }
+
     pub fn name_of(&self, id: &str) -> Option<&str> {
         self.repos
             .iter()
@@ -719,5 +733,44 @@ mod tests {
 
         assert_eq!(resolved.as_path(), Path::new("/repos/acme-api"));
         assert!(registry.resolve("r404").is_none());
+    }
+
+    /// 監視の対象は、並び順どおりの id と `--git-common-dir` の組
+    /// (docs/adr/0022-auto-refresh.md)
+    #[test]
+    fn lists_the_common_directory_of_every_repository() {
+        let mut registry = Registry::default();
+        let first = registry
+            .add(
+                "acme-api".to_owned(),
+                PathBuf::from("/repos/acme-api"),
+                PathBuf::from("/repos/acme-api/.git"),
+            )
+            .expect("the first repository is registered");
+        let second = registry
+            .add(
+                "acme-web".to_owned(),
+                PathBuf::from("/repos/acme-web"),
+                PathBuf::from("/repos/acme-web/.git"),
+            )
+            .expect("the second repository is registered");
+
+        assert_eq!(
+            registry.common_dirs(),
+            vec![
+                (first, PathBuf::from("/repos/acme-api/.git")),
+                (second.clone(), PathBuf::from("/repos/acme-web/.git")),
+            ]
+        );
+
+        registry.remove(&second);
+        assert_eq!(
+            registry.common_dirs(),
+            vec![(
+                registry.registrations()[0].id.clone(),
+                PathBuf::from("/repos/acme-api/.git")
+            )],
+            "消したリポジトリは監視の対象から外れる"
+        );
     }
 }

@@ -19,6 +19,16 @@ export function DeleteBranch() {
   );
 }
 
+/** 状態の取り直し。ネットワークは触らないので、破線のフェッチとは別の形にする */
+export function Refresh() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M11.5 4.5A5 5 0 1 1 8 3" />
+      <path d="M6.4 1.6 8 3 6.4 4.4" />
+    </svg>
+  );
+}
+
 export function Fetch() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

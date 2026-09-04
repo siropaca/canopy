@@ -1,5 +1,5 @@
 import { classNames } from "@/shared/lib/classNames";
-import { AheadIcon, BehindIcon, WorktreeIcon } from "@/shared/ui/icons";
+import { AheadIcon, BehindIcon, DirtyIcon, WorktreeIcon } from "@/shared/ui/icons";
 
 import styles from "./Indicators.module.css";
 
@@ -24,7 +24,8 @@ export function Indicators({ dirtyCount, behind, ahead, gone, worktreeName }: In
     <>
       {dirtyCount > 0 && (
         <span className={styles.dirty} title={`未コミット ${dirtyCount} ファイル`}>
-          ●{dirtyCount}
+          <DirtyIcon />
+          {dirtyCount}
         </span>
       )}
       {behind > 0 && (

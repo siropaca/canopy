@@ -1,0 +1,30 @@
+/* 形はプッシュのダイアログに合わせる (docs/mock/tree.tmpl.html の `.modal`) */
+.info {
+  margin-top: 8px;
+  color: var(--dim);
+}
+
+.warning {
+  margin-top: 8px;
+  color: var(--dirty);
+}
+
+.checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.checkbox input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.note {
+  color: var(--dim);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}

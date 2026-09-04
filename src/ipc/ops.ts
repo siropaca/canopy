@@ -84,6 +84,11 @@ export function renameBranch(repoId: RepoId, name: string, newName: string): Pro
   });
 }
 
+/** ローカルブランチの削除。`force` なら `git branch -D` */
+export function deleteBranch(repoId: RepoId, name: string, force: boolean): Promise<OpOutcome> {
+  return invoke<OpOutcome>(COMMANDS.deleteBranch, { repo_id: repoId, name, force });
+}
+
 /** プッシュダイアログに出すもの。スナップショットには載っていない */
 export function getPushPreview(repoId: RepoId, branch: string): Promise<PushPreview> {
   return invoke<PushPreview>(COMMANDS.getPushPreview, { repo_id: repoId, branch });

@@ -18,6 +18,10 @@ use canopy_lib::state::AppState;
 
 use support::Fixture;
 
+use std::time::Instant;
+
+use canopy_lib::watch::MUTE_GRACE;
+
 /// Run one operation and require the app side not to fail.
 async fn run(state: &AppState, id: &str, op: Operation) -> OpOutcome {
     ops::run(state, id, &op)
@@ -97,6 +101,126 @@ async fn refuses_a_branch_name_that_is_an_option() {
         .await
         .expect("snapshot should build");
     assert_eq!(after.changes.total, 1);
+}
+
+/// マージ済みのローカルブランチは `-d` で消える (docs/adr/0021-delete-local-branch.md)
+#[tokio::test]
+async fn deletes_a_merged_branch() {
+    let fixture = Fixture::new().await;
+    fixture.work_git(&["branch", "spike"]).await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+
+    let outcome = run(
+        &state,
+        &ids[0],
+        Operation::Delete {
+            branch: "spike".to_owned(),
+            force: false,
+        },
+    )
+    .await;
+
+    assert!(outcome.result.ok, "{:?}", outcome.result);
+    assert_eq!(outcome.result.steps.len(), 1);
+    assert_eq!(
+        outcome.result.steps[0].command,
+        "git branch -d --end-of-options spike"
+    );
+    assert!(
+        !snapshot_of(&outcome)
+            .local
+            .iter()
+            .any(|branch| branch.name == "spike"),
+        "消えたブランチが残っている"
+    );
+}
+
+/// **マージされていないブランチは git が止める。** 黙って `-D` に落とさない
+#[tokio::test]
+async fn refuses_to_delete_an_unmerged_branch() {
+    let fixture = Fixture::new().await;
+    fixture.work_git(&["checkout", "-b", "spike"]).await;
+    fixture.commit("only-on-spike").await;
+    fixture.work_git(&["checkout", "main"]).await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+
+    let outcome = run(
+        &state,
+        &ids[0],
+        Operation::Delete {
+            branch: "spike".to_owned(),
+            force: false,
+        },
+    )
+    .await;
+
+    assert!(!outcome.result.ok);
+    assert_eq!(
+        message(&outcome),
+        "マージされていません (強制削除にすると消せます)"
+    );
+    assert!(
+        snapshot_of(&outcome)
+            .local
+            .iter()
+            .any(|branch| branch.name == "spike"),
+        "止めたのに消えている"
+    );
+}
+
+/// 強制なら未マージでも消える。**選んだときだけ**
+#[tokio::test]
+async fn deletes_an_unmerged_branch_when_forced() {
+    let fixture = Fixture::new().await;
+    fixture.work_git(&["checkout", "-b", "spike"]).await;
+    fixture.commit("only-on-spike").await;
+    fixture.work_git(&["checkout", "main"]).await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+
+    let outcome = run(
+        &state,
+        &ids[0],
+        Operation::Delete {
+            branch: "spike".to_owned(),
+            force: true,
+        },
+    )
+    .await;
+
+    assert!(outcome.result.ok, "{:?}", outcome.result);
+    assert_eq!(
+        outcome.result.steps[0].command, "git branch -D --end-of-options spike",
+        "強制のときだけ -D"
+    );
+    assert!(
+        !snapshot_of(&outcome)
+            .local
+            .iter()
+            .any(|branch| branch.name == "spike")
+    );
+}
+
+/// チェックアウト中のブランチは git が拒否する。文言で理由が分かる
+#[tokio::test]
+async fn refuses_to_delete_the_checked_out_branch() {
+    let fixture = Fixture::new().await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+
+    let outcome = run(
+        &state,
+        &ids[0],
+        Operation::Delete {
+            branch: "main".to_owned(),
+            force: false,
+        },
+    )
+    .await;
+
+    assert!(!outcome.result.ok);
+    assert_eq!(
+        message(&outcome),
+        "チェックアウト中のブランチは削除できません"
+    );
 }
 
 /// 名前の変更のあと追跡先を外す。外さないと origin 側に旧名と新名が両方できる
@@ -1204,4 +1328,116 @@ async fn names_the_push_target_even_when_it_matches() {
         outcome.result.steps[0].command,
         "git push --end-of-options origin main:main"
     );
+}
+
+/// 書き込みの間は `.git` の監視を黙らせる。
+///
+/// **取り直しは操作の側が同じロックの中でやっている**
+/// (docs/adr/0009-concurrency-and-refresh.md)。監視が拾った分をもう一度
+/// 走らせると、同じリポジトリの読み取りが 2 倍になる
+/// (docs/adr/0022-auto-refresh.md)
+#[tokio::test]
+async fn keeps_the_watcher_quiet_around_a_write() {
+    let fixture = Fixture::new().await;
+    fixture.work_git(&["branch", "topic"]).await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+    let common_dir = state
+        .locate(&ids[0])
+        .await
+        .expect("the repository is registered")
+        .common_dir;
+
+    run(
+        &state,
+        &ids[0],
+        Operation::Checkout {
+            name: "topic".to_owned(),
+        },
+    )
+    .await;
+
+    assert!(
+        state.quiet().is_muted(&common_dir, Instant::now()),
+        "自分が起こした変化を監視が拾ってしまう"
+    );
+    assert!(
+        !state
+            .quiet()
+            .is_muted(std::path::Path::new("/repos/other/.git"), Instant::now()),
+        "関係ないリポジトリまで黙らせている"
+    );
+}
+
+/// 読み取りでは黙らせない。
+///
+/// **`GIT_OPTIONAL_LOCKS=0` があるので `git status` は `index` を書かない**
+/// (docs/adr/0009-concurrency-and-refresh.md)。黙らせると、その間に
+/// ターミナルで動かした分を取りこぼす
+#[tokio::test]
+async fn does_not_silence_the_watcher_for_a_read() {
+    let fixture = Fixture::new().await;
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+    let common_dir = state
+        .locate(&ids[0])
+        .await
+        .expect("the repository is registered")
+        .common_dir;
+
+    ops::read_snapshot(&state, &ids[0])
+        .await
+        .expect("the snapshot should build");
+
+    assert!(!state.quiet().is_muted(&common_dir, Instant::now()));
+}
+
+/// 書き込みの**間ずっと**黙らせる。
+///
+/// 終わったあとの 1 点だけを見ると、実行中に手放していても猶予
+/// (`MUTE_GRACE`) の中なので通ってしまう。**遠い未来の時刻で聞く。**
+/// 猶予に入っているだけなら false、走っている最中だけ true になる
+#[tokio::test]
+async fn keeps_the_watcher_quiet_for_the_whole_write() {
+    let fixture = Fixture::new().await;
+    fixture.work_git(&["branch", "topic"]).await;
+    // チェックアウトを遅くして、走っている最中を観測できるようにする
+    let hooks = fixture.work().join(".git/hooks");
+    std::fs::create_dir_all(&hooks).expect("hooks dir");
+    let hook = hooks.join("post-checkout");
+    std::fs::write(&hook, "#!/bin/sh\nsleep 0.5\n").expect("write hook");
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+    let (state, ids) = fixture.state(&[fixture.work()]).await;
+    let common_dir = state
+        .locate(&ids[0])
+        .await
+        .expect("the repository is registered")
+        .common_dir;
+
+    let (outcome, running) = tokio::join!(
+        run(
+            &state,
+            &ids[0],
+            Operation::Checkout {
+                name: "topic".to_owned(),
+            },
+        ),
+        async {
+            for _ in 0..3000 {
+                // 猶予ではなく「走っている」ことだけを見る
+                if state
+                    .quiet()
+                    .is_muted(&common_dir, Instant::now() + MUTE_GRACE * 4)
+                {
+                    return true;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            false
+        },
+    );
+
+    assert!(outcome.result.ok, "{:?}", outcome.result);
+    assert!(running, "git を走らせている間に監視を黙らせていない");
 }

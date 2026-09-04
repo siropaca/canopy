@@ -16,6 +16,7 @@ import {
   canCheckout,
   canCheckoutAndPull,
   canCheckoutPrevious,
+  canDelete,
   canFetch,
   canForcePush,
   canPull,
@@ -337,6 +338,45 @@ describe("canForcePush", () => {
   });
 });
 
+describe("canDelete", () => {
+  it("他のローカルブランチだけ有効", () => {
+    const rows = allKinds();
+
+    // `main` は現在のブランチなので、`feature/a` の方を見る
+    expect(canDelete(pick(rows, (row) => row.kind === "branch" && row.label === "a"))).toBe(true);
+    for (const kind of ["repo", "section", "directory", "remote", "tag"] as const) {
+      expect(canDelete(pick(rows, (row) => row.kind === kind)), kind).toBe(false);
+    }
+  });
+
+  /** git が `used by worktree at` で必ず拒否する (docs/adr/0021-delete-local-branch.md) */
+  it("現在のブランチは無効", () => {
+    const rows = rowsOf(makeRepo("r1", { local: [makeBranch("main", { is_current: true })] }));
+
+    expect(canDelete(pick(rows, (row) => row.kind === "branch"))).toBe(false);
+  });
+
+  it("別のワークツリーにあるブランチは無効", () => {
+    const rows = rowsOf(
+      makeRepo("r1", {
+        local: [makeBranch("dev/side", { worktree_path: "/worktrees/side" })],
+        worktrees: [makeWorktree("dev/side", "/worktrees/side")],
+      }),
+    );
+
+    expect(canDelete(pick(rows, (row) => row.kind === "branch"))).toBe(false);
+  });
+
+  /** 実行中に消すと、走っている操作の結果を捨てる先が無くなる (docs/specs/ui.md) */
+  it("実行中のリポジトリのブランチは無効", () => {
+    const running = rowsOf(makeRepo("r1", { local: [makeBranch("side")] }, { running: true }));
+    const idle = rowsOf(makeRepo("r1", { local: [makeBranch("side")] }));
+
+    expect(canDelete(pick(running, (row) => row.kind === "branch"))).toBe(false);
+    expect(canDelete(pick(idle, (row) => row.kind === "branch"))).toBe(true);
+  });
+});
+
 describe("canCheckoutPrevious", () => {
   it("detached HEAD のリポジトリ行だけ有効 (docs/specs/ui.md)", () => {
     const detached = rowsOf(
@@ -367,6 +407,7 @@ describe("実行中のリポジトリ", () => {
       expect(canPull(row), `canPull ${row.kind}`).toBe(false);
       expect(canCheckout(row), `canCheckout ${row.kind}`).toBe(false);
       expect(canCheckoutAndPull(row), `canCheckoutAndPull ${row.kind}`).toBe(false);
+      expect(canDelete(row), `canDelete ${row.kind}`).toBe(false);
       expect(canPush(row), `canPush ${row.kind}`).toBe(false);
       expect(canRename(row), `canRename ${row.kind}`).toBe(false);
       expect(canCheckoutPrevious(row), `canCheckoutPrevious ${row.kind}`).toBe(false);

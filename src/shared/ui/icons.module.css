@@ -47,3 +47,12 @@
   height: 11px;
   stroke-width: 1.35;
 }
+
+/* 未コミットの丸。矢印と同じ枠に収めて、線ではなく塗りで描く */
+.dot {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
+  stroke: none;
+}

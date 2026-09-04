@@ -84,6 +84,20 @@ export function WorktreeIcon() {
   );
 }
 
+/**
+ * 未コミットの印。
+ *
+ * **文字の `●` ではなく SVG にする。** 文字だと大きさがフォント任せになり、
+ * 数字との間隔も入らないので、矢印と揃わない (docs/design-system.md)。
+ */
+export function DirtyIcon() {
+  return (
+    <svg className={styles.dot} viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="6" cy="6" r="3.1" />
+    </svg>
+  );
+}
+
 /** behind。取り込むもの */
 export function BehindIcon() {
   return (

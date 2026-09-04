@@ -99,6 +99,18 @@ export function canPush(row: RowNode | null): boolean {
   return row !== null && !row.running && row.kind === "branch";
 }
 
+/**
+ * 「削除」を有効にできるか。
+ *
+ * ローカルブランチだけ。**現在のブランチと、別のワークツリーにあるブランチは無効。**
+ * git が `used by worktree at` で必ず拒否するので、押せる形にしても失敗しか返らない
+ * (docs/adr/0021-delete-local-branch.md)。
+ */
+export function canDelete(row: RowNode | null): boolean {
+  if (row === null || row.running || row.kind !== "branch") return false;
+  return !row.branch.is_current && row.worktreeName === null;
+}
+
 /** 「名前の変更」を有効にできるか。ローカルブランチだけ */
 export function canRename(row: RowNode | null): boolean {
   return row !== null && !row.running && row.kind === "branch";

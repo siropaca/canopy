@@ -78,6 +78,7 @@ beforeEach(() => {
   renders.sidebar = 0;
   vi.mocked(bootstrap.loadEverything).mockResolvedValue(undefined);
   vi.mocked(events.listenForRepoUpdates).mockResolvedValue(vi.fn());
+  vi.mocked(events.listenForRepoChanges).mockResolvedValue(vi.fn());
   vi.mocked(events.watchWindowVisibility).mockReturnValue(vi.fn());
   useUiStore.setState({ paneWidth: 360 });
 });

@@ -7,6 +7,7 @@ import {
   canPull,
   canPush,
   canRemoveRepo,
+  canDelete,
   canRename,
 } from "@/shared/lib/selection";
 
@@ -28,6 +29,7 @@ export type MenuAction =
   | { readonly type: "checkout" }
   | { readonly type: "checkoutAndPull" }
   | { readonly type: "rename" }
+  | { readonly type: "delete" }
   | { readonly type: "fetchRepo" }
   | { readonly type: "fetchAll" }
   | { readonly type: "checkoutPrevious" }
@@ -168,7 +170,7 @@ function otherBranchItems(row: BranchRow, repo: RepoState): MenuItem[] {
     asCopy("ブランチ名をコピー", name),
     action("名前の変更", { type: "rename" }, !canRename(row)),
     SEPARATOR,
-    v2("削除"),
+    action("削除", { type: "delete" }, !canDelete(row)),
   ];
 }
 
