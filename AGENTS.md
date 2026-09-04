@@ -37,7 +37,7 @@ docs に書いていないことがあれば、それは調査して docs に書
 
 | ファイル | 何が書いてあるか |
 | --- | --- |
-| [README.md](README.md) | 何のためのツールか、v1 でできること、起動方法 |
+| [README.md](README.md) | 何のためのツールか、できること、ビルドと起動 |
 | [docs/motivation.md](docs/motivation.md) | 何を解決するために作っているか。設計の前提になっている事情 |
 | [docs/architecture.md](docs/architecture.md) | プロセス構成、レイヤ、ディレクトリ、データフロー、並行性 |
 | [docs/design-system.md](docs/design-system.md) | 色・寸法・アイコン・密度のトークンと使い分け |
