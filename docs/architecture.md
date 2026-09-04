@@ -38,7 +38,7 @@ canopy/
 │   │   ├── detail/             右パネル
 │   │   ├── console/            コンソールパネルとタブ
 │   │   ├── sidebar/            左のアイコンツールバー
-│   │   ├── status-bar/         下端の集計表示
+│   │   ├── status-bar/         下端の集計と、いま何をしているか
 │   │   ├── context-menu/       右クリックメニューと、行ごとの項目の決定
 │   │   ├── dialog/             ダイアログの枠と個別ダイアログ (名前の変更・プッシュ・ブランチの削除)
 │   │   └── toast/              トースト
@@ -127,6 +127,9 @@ features の `useEffect` で購読すると、`revision` の比較を通す場�
 5. 操作 (checkout / pull / push / fetch / rename / delete) は Tauri コマンドを 1 回呼ぶ
 6. コマンドは結果 (実行した段ごとの成否・stdout・stderr) を返し、**成否に関係なく**対象リポジトリのスナップショットを取り直して一緒に返す
 7. フロントは結果からトーストとコンソール行を作り、スナップショットで表示を更新する。`revision` が古ければ捨てる
+
+**いま何をしているかの文言は `shared/lib/activity.ts` の 1 箇所。**  
+書き込み (`running`) と取り直し (`reading`) をストアが別々に持ち、ステータスバーはそれを読むだけ ([adr/0023-progress-in-the-status-bar.md](adr/0023-progress-in-the-status-bar.md))。
 
 **結果をトーストとコンソールへ流すのは `store/results.ts` の 1 箇所。**  
 操作ごとに書くと、どれか 1 つだけコンソールに出ない、という壊れ方をする。  

@@ -41,7 +41,7 @@ class のルールがブラウザ既定の `[hidden] { display: none }` より�
 
 ### 導出した行を毎回作り直すと再描画が止まらない
 
-`orderedRepos` は「実行中」をストアの本数から `RepoState` へ写す。  
+`orderedRepos` は「実行中」をストアの操作の列から `RepoState` へ写す。  
 写した行を**呼ばれるたびに新しく作る**と、`useShallow` の比較が毎回外れる。  
 外れる → 再描画 → また比較が外れる、で `Maximum update depth exceeded` になり、  
 **画面が真っ白になる** (実測。フェッチを 1 回押すだけで再現した)。
