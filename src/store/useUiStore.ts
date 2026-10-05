@@ -1,5 +1,6 @@
 import { create, type StateCreator } from "zustand";
 
+import type { RepoColor } from "@/ipc/generated/RepoColor";
 import type { UiState } from "@/ipc/generated/UiState";
 import type { RepoId } from "@/ipc/types";
 import { close, open } from "@/shared/lib/treeKeys";
@@ -22,6 +23,17 @@ export interface UiStoreState {
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
+  /**
+   * 詳細ペインを出しているか (docs/adr/0025-hide-detail-pane.md)。
+   * **変える入口は `store/detailPaneActions.ts` だけ。** ウィンドウの下限も一緒に変えるため、
+   * ここには切り替えの操作を置かない
+   */
+  readonly detailOpen: boolean;
+  /**
+   * リポジトリ見出しの色 (docs/adr/0024-repo-heading-color.md)。
+   * 色を付けていないリポジトリは入れない
+   */
+  readonly repoColors: ReadonlyMap<RepoId, RepoColor>;
   /**
    * ウィンドウが画面に出ているか。**保存しない。**
    *
@@ -47,6 +59,8 @@ export interface UiStoreState {
   setConsoleOpen: (open: boolean) => void;
   toggleGroupDirectories: () => void;
   toggleLocalOnly: () => void;
+  /** 見出しの色を付ける。`null` で外す */
+  setRepoColor: (repoId: RepoId, color: RepoColor | null) => void;
   /** Rust から届く `window_visibility` を受ける */
   setWindowVisible: (visible: boolean) => void;
 }
@@ -59,6 +73,8 @@ const creator: StateCreator<UiStoreState> = (set) => ({
   groupDirectories: true,
   localOnly: false,
   consoleOpen: false,
+  detailOpen: true,
+  repoColors: new Map<RepoId, RepoColor>(),
   // 起動した時点では出ている
   windowVisible: true,
 
@@ -69,6 +85,8 @@ const creator: StateCreator<UiStoreState> = (set) => ({
       groupDirectories: uiState.group_directories,
       localOnly: uiState.local_only,
       consoleOpen: uiState.console_open,
+      detailOpen: uiState.detail_open,
+      repoColors: new Map(Object.entries(uiState.repo_colors)),
     })),
 
   toggleExpanded: (key) =>
@@ -99,6 +117,14 @@ const creator: StateCreator<UiStoreState> = (set) => ({
 
   toggleLocalOnly: () => set((state) => ({ localOnly: !state.localOnly })),
 
+  setRepoColor: (repoId, color) =>
+    set((state) => {
+      const next = new Map(state.repoColors);
+      if (color === null) next.delete(repoId);
+      else next.set(repoId, color);
+      return { repoColors: next };
+    }),
+
   // **同じ値なら通知しない。** `visibilitychange` は同じ状態でも届くことがあり、
   // そのたびに永続化のデバウンスが張り直される
   setWindowVisible: (visible) =>
@@ -124,6 +150,9 @@ export function toUiState(state: UiStoreState, order: readonly RepoId[]): UiStat
     console_open: state.consoleOpen,
     group_directories: state.groupDirectories,
     local_only: state.localOnly,
+    detail_open: state.detailOpen,
+    // 鍵の並びを揃える。順番だけ違う保存を作らない。Rust 側 (BTreeMap) と同じ文字コード順
+    repo_colors: Object.fromEntries([...state.repoColors].sort(([a], [b]) => (a < b ? -1 : 1))),
   };
 }
 

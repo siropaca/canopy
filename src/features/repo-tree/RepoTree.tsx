@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 
 import type { RowNode } from "@/ipc/types";
 import { useCssVariable } from "@/shared/hooks/useCssVariable";
+import { classNames } from "@/shared/lib/classNames";
 import { repoBlocks } from "@/shared/lib/reorder";
 import { stickyHeaderAt } from "@/shared/lib/stickyHeader";
 import { ROW_HEIGHT } from "@/shared/styles/rowHeight";
@@ -36,6 +37,8 @@ export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
   const selectedKey = useUiStore((state) => state.selectedKey);
   const select = useUiStore((state) => state.select);
   const toggleExpanded = useUiStore((state) => state.toggleExpanded);
+  // 見出しの色 (docs/adr/0024-repo-heading-color.md)。固定した見出しも同じ renderRow で描く
+  const repoColors = useUiStore((state) => state.repoColors);
 
   const [viewport, setViewport] = useState<HTMLElement | null>(null);
   const onViewport = useCallback((element: HTMLElement | null) => {
@@ -62,13 +65,34 @@ export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
         row={row}
         selected={row.key === selectedKey}
         dragging={row.repoId === draggingRepoId}
+        color={row.kind === "repo" ? (repoColors.get(row.repoId) ?? null) : null}
         onSelect={select}
         onToggle={toggleExpanded}
         onActivate={onActivate}
         onContextMenu={onContextMenu}
       />
     ),
-    [selectedKey, draggingRepoId, select, toggleExpanded, onActivate, onContextMenu],
+    [selectedKey, draggingRepoId, repoColors, select, toggleExpanded, onActivate, onContextMenu],
+  );
+
+  /**
+   * 行が無い所を押したら選択を外す (docs/adr/0026-clear-selection-on-empty-area.md)。
+   *
+   * **ビューポートの中だけを見る。** スクロールバーはビューポートの外にあるので、
+   * 掴んでも外れない。行と固定した見出しは `data-kind` を持つので除く。
+   * 行の選択は行の側 (TreeRow) が先に済ませている。
+   * **Ctrl+クリックは除く。** macOS では右クリックと同じ操作だが、左ボタンとして届く。
+   * 押せる所は最後の行の下の余白 (`.layer` の padding)。仮想リストの器は行の高さ
+   * ぴったりなので、余白が無いとツリーが長いときに押せる所が無くなる。
+   */
+  const clearOnEmpty = useCallback(
+    (event: React.MouseEvent) => {
+      if (event.button !== 0 || event.ctrlKey || !(event.target instanceof Element)) return;
+      if (viewport?.contains(event.target) !== true) return;
+      if (event.target.closest("[data-kind]") !== null) return;
+      select(null);
+    },
+    [viewport, select],
   );
 
   if (loadError !== null) {
@@ -91,7 +115,7 @@ export function RepoTree({ rows, onActivate, onContextMenu }: RepoTreeProps) {
   }
 
   return (
-    <div className={styles.tree}>
+    <div className={styles.tree} onMouseDown={clearOnEmpty}>
       <ScrollArea className={styles.scroll} onViewport={onViewport}>
         <div className={styles.layer} ref={rowsLayer}>
           <VirtualRows
@@ -179,11 +203,19 @@ function DropLine({ offset }: { readonly offset: number }) {
 
 /**
  * ツリーのペイン。幅は `UiState.pane_width`。
+ * **詳細ペインを隠している間は残りの幅を全部使う** (docs/adr/0025-hide-detail-pane.md)。
+ * 保存した幅は書き換えない。表示に戻したときに同じ幅で出す。
  *
  * **検索欄は最上部に固定する。** ツリーをスクロールしても残る
  * (docs/specs/ui.md の「画面の構成」)。
  */
-export function TreePane({ children }: { readonly children: React.ReactNode }) {
+interface TreePaneProps {
+  /** 残りの幅を全部使うか。詳細ペインを隠している間 (App が決める) */
+  readonly fill: boolean;
+  readonly children: React.ReactNode;
+}
+
+export function TreePane({ fill, children }: TreePaneProps) {
   const paneWidth = useUiStore((state) => state.paneWidth);
   const paneRef = useRef<HTMLDivElement>(null);
   // 幅を CSS 変数で渡す。JSX の `style` は使わない (docs/security.md)
@@ -192,7 +224,12 @@ export function TreePane({ children }: { readonly children: React.ReactNode }) {
   return (
     // tabIndex は選択色をフォーカスで変えるため。キーボード操作は持たない
     // (docs/adr/0008-no-keyboard-shortcuts.md)
-    <div className={styles.pane} ref={paneRef} tabIndex={0} data-tree-pane="">
+    <div
+      className={classNames(styles.pane, fill && styles.fill)}
+      ref={paneRef}
+      tabIndex={0}
+      data-tree-pane=""
+    >
       <SearchBar />
       {children}
     </div>

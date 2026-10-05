@@ -7,6 +7,12 @@
   outline: none;
 }
 
+/* 詳細ペインを隠している間。残りの幅を全部使う (docs/adr/0025-hide-detail-pane.md) */
+.pane.fill {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
 /*
  * スクロール領域と、その上端に重ねる固定見出しの器。
  * 押し上げられて上へ抜ける見出しを検索欄まではみ出させないので `overflow: hidden`。
@@ -39,9 +45,14 @@
   text-align: center;
 }
 
-/* 行と挿入線を同じ座標系に置く器。高さは中の仮想リストが決める */
+/*
+ * 行と挿入線を同じ座標系に置く器。高さは中の仮想リストが決める。
+ * 下の余白は選択を外すために押す所 (docs/adr/0026-clear-selection-on-empty-area.md)。
+ * 仮想リストの器は行の高さぴったりなので、これが無いとツリーが長いときに押せる所が無い
+ */
 .layer {
   position: relative;
+  padding-bottom: calc(var(--row) * 2);
 }
 
 /*

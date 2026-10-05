@@ -221,6 +221,7 @@ describe("リポジトリ見出し", () => {
       "すべてフェッチ",
       "──",
       "パス/参照のコピー",
+      "見出しの色",
       "──",
       "Finder で表示",
       "ターミナルで開く",
@@ -231,8 +232,7 @@ describe("リポジトリ見出し", () => {
   });
 
   it("コピーはサブメニュー。項目の右に実際の値を出す", () => {
-    const submenu = items.find((item) => item.kind === "submenu");
-    if (submenu?.kind !== "submenu") throw new Error("サブメニューが無い");
+    const submenu = submenuOf(items, "パス/参照のコピー");
 
     expect(labels([...submenu.items])).toEqual([
       "コピー",
@@ -250,10 +250,41 @@ describe("リポジトリ見出し", () => {
   it("origin が無ければ URL の項目を出さない", () => {
     const noRemote = makeRepo("r1", { origin_url: null, local: [makeBranch("main")] });
 
-    const submenu = itemsFor("repo", undefined, noRemote).find((item) => item.kind === "submenu");
-    if (submenu?.kind !== "submenu") throw new Error("サブメニューが無い");
+    const submenu = submenuOf(itemsFor("repo", undefined, noRemote), "パス/参照のコピー");
 
     expect(labels([...submenu.items])).toEqual(["コピー", "絶対パス", "リポジトリ名"]);
+  });
+
+  /** 7 択。`なし` が先頭 (docs/adr/0024-repo-heading-color.md) */
+  it("見出しの色はサブメニュー。なしと 6 色を並べる", () => {
+    const submenu = submenuOf(items, "見出しの色");
+
+    expect(labels([...submenu.items])).toEqual(["なし", "赤", "オレンジ", "黄", "緑", "青", "紫"]);
+  });
+
+  it("見出しの色の項目は、その色を付ける操作になる。なしは外す", () => {
+    const submenu = submenuOf(items, "見出しの色");
+
+    const actions = submenu.items.map((item) => (item.kind === "action" ? item.action : null));
+
+    expect(actions).toEqual([
+      { type: "setColor", color: null },
+      { type: "setColor", color: "red" },
+      { type: "setColor", color: "orange" },
+      { type: "setColor", color: "yellow" },
+      { type: "setColor", color: "green" },
+      { type: "setColor", color: "blue" },
+      { type: "setColor", color: "purple" },
+    ]);
+  });
+
+  /** 見本は見出しに塗る色そのもの。なしは既定のグレー */
+  it("見出しの色の項目に色見本を付ける", () => {
+    const submenu = submenuOf(items, "見出しの色");
+
+    const swatches = submenu.items.map((item) => (item.kind === "action" ? item.swatch : null));
+
+    expect(swatches).toEqual(["none", "red", "orange", "yellow", "green", "blue", "purple"]);
   });
 
   it("detached HEAD のときだけ「直前のブランチに戻る」を出す", () => {
@@ -310,7 +341,22 @@ describe("実行中のリポジトリ", () => {
 
     expect(enabled(itemsFor("repo", undefined, running))).toContain("Finder で表示");
   });
+
+  it("見出しの色も止めない (git を実行しない)", () => {
+    const running = makeRepo("r1", { local: [makeBranch("main")] }, { running: true });
+
+    const submenu = submenuOf(itemsFor("repo", undefined, running), "見出しの色");
+
+    expect(enabled([...submenu.items])).toEqual(["なし", "赤", "オレンジ", "黄", "緑", "青", "紫"]);
+  });
 });
+
+/** 名前でサブメニューを引く */
+function submenuOf(items: MenuItem[], label: string): Extract<MenuItem, { kind: "submenu" }> {
+  const found = items.find((item) => item.kind === "submenu" && item.label === label);
+  if (found?.kind !== "submenu") throw new Error(`${label} のサブメニューが無い`);
+  return found;
+}
 
 /** 区切りは `──` として並びに含めて比べる */
 function labels(items: MenuItem[]): string[] {

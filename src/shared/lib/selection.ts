@@ -1,5 +1,5 @@
 import type { Branch } from "@/ipc/generated/Branch";
-import type { RowNode } from "@/ipc/types";
+import type { RepoId, RowNode } from "@/ipc/types";
 
 /*
  * 行に対する述語。
@@ -75,6 +75,20 @@ export function canCheckout(row: RowNode | null): boolean {
 export function canFetch(row: RowNode | null, bulkFetchRunning = false): boolean {
   if (row === null) return !bulkFetchRunning;
   return !row.running;
+}
+
+/** サイドバーのフェッチの対象 */
+export type FetchTarget =
+  { readonly kind: "all" } | { readonly kind: "repo"; readonly repoId: RepoId };
+
+/**
+ * サイドバーのフェッチの対象。選択があればそのリポジトリ、無ければ全リポジトリ。
+ *
+ * **名前 (`フェッチ (<対象>)`) と動作がこれを見る** (docs/adr/0026-clear-selection-on-empty-area.md)。
+ * 別々に `row === null` で分けると、片方だけ直したときに名前と実際の対象が食い違う。
+ */
+export function fetchTargetOf(row: RowNode | null): FetchTarget {
+  return row === null ? { kind: "all" } : { kind: "repo", repoId: row.repoId };
 }
 
 /** 「チェックアウトとプル」を有効にできるか。両方できるときだけ */

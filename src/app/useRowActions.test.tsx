@@ -11,6 +11,7 @@ vi.mock("@/store/bootstrap");
 
 import * as bootstrap from "@/store/bootstrap";
 import * as ops from "@/store/opsActions";
+import { useUiStore } from "@/store/useUiStore";
 
 import { useRowActions } from "./useRowActions";
 
@@ -148,6 +149,49 @@ describe("メニューの項目から操作への割り振り", () => {
     expect(bootstrap.addRepository).toHaveBeenCalledOnce();
     expect(bootstrap.removeRepository).toHaveBeenCalledExactlyOnceWith("r1");
     expect(ops.copyToClipboard).toHaveBeenCalledExactlyOnceWith("r1", "feature/a");
+  });
+
+  /** git を実行しない。UI の状態を変えるだけ (docs/adr/0024-repo-heading-color.md) */
+  it("見出しの色はそのリポジトリの色を付け替える。なしで外す", () => {
+    const rows = rowsOf();
+    const result = actionsFor(rows);
+    const repo = rows.find((row) => row.kind === "repo");
+    if (repo === undefined) throw new Error("リポジトリ行が無い");
+    useUiStore.setState({ repoColors: new Map([["r9", "blue"]]) });
+
+    act(() => {
+      result.current.run({ type: "setColor", color: "green" }, repo);
+    });
+    expect([...useUiStore.getState().repoColors]).toEqual([
+      ["r9", "blue"],
+      ["r1", "green"],
+    ]);
+
+    act(() => {
+      result.current.run({ type: "setColor", color: null }, repo);
+    });
+    expect([...useUiStore.getState().repoColors]).toEqual([["r9", "blue"]]);
+  });
+
+  /**
+   * 右クリックした見出しは選択中になり、選択の色が見出しの色より勝つ。
+   * 外さないと、何色になったかが他の行を押すまで見えない (docs/adr/0024-repo-heading-color.md)
+   */
+  it.each([
+    ["色を付けた", "green"],
+    ["色をなしにした", null],
+  ] as const)("見出しの%sら選択を外す", (_label, color) => {
+    const rows = rowsOf();
+    const result = actionsFor(rows);
+    const repo = rows.find((row) => row.kind === "repo");
+    if (repo === undefined) throw new Error("リポジトリ行が無い");
+    useUiStore.getState().select(repo.key);
+
+    act(() => {
+      result.current.run({ type: "setColor", color }, repo);
+    });
+
+    expect(useUiStore.getState().selectedKey).toBeNull();
   });
 
   it("プッシュと名前の変更はダイアログを開くだけ", () => {

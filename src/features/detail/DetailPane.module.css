@@ -90,7 +90,7 @@
 .actions .primary {
   border-color: var(--btn-border);
   background: var(--btn);
-  color: var(--fg-strong);
+  color: var(--accent-fg);
 }
 
 .actions .primary:hover {
@@ -153,7 +153,7 @@
 
 /*
  * 無効なボタン。**プライマリの地も外す。**
- * 濃い青の上に `--disabled` の文字を乗せると読めない (実機で確認)
+ * プライマリの地の上に `--disabled` の文字を乗せると読めない (実機で確認)
  */
 .actions button[disabled],
 .actions button[disabled]:hover {

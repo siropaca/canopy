@@ -63,7 +63,7 @@ function stickyRow(container: HTMLElement): HTMLElement {
 }
 
 beforeEach(() => {
-  useUiStore.setState({ selectedKey: null, expanded: new Set<string>() });
+  useUiStore.setState({ selectedKey: null, expanded: new Set<string>(), repoColors: new Map() });
   useRepoStore.getState().registerAll([
     { id: "r1", name: "acme-api", path: "/repos/acme-api" },
     { id: "r2", name: "acme-web", path: "/repos/acme-web" },
@@ -129,6 +129,16 @@ describe("リポジトリ見出しの固定表示", () => {
     scrollTo(container, 2 * ROW_HEIGHT);
 
     expect(stickyRow(container).className).toContain("selected");
+  });
+
+  /** どのリポジトリを見ているかを色でも追えるようにする (docs/adr/0024-repo-heading-color.md) */
+  it("色を付けたリポジトリは、固定した見出しも同じ色になる", () => {
+    useUiStore.setState({ repoColors: new Map([["r1", "green"]]) });
+    const { container } = renderTree(rows());
+
+    scrollTo(container, 2 * ROW_HEIGHT);
+
+    expect(stickyRow(container).dataset.color).toBe("green");
   });
 
   it("固定した見出しをクリックすると選択できる", () => {

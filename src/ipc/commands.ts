@@ -29,6 +29,8 @@ export const COMMANDS = {
   getPushPreview: "get_push_preview",
   revealInFinder: "reveal_in_finder",
   openInTerminal: "open_in_terminal",
+  // ウィンドウ (commands/window.rs)
+  setDetailOpen: "set_detail_open",
 } as const;
 
 /**

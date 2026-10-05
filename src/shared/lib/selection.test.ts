@@ -18,6 +18,7 @@ import {
   canCheckoutPrevious,
   canDelete,
   canFetch,
+  fetchTargetOf,
   canForcePush,
   canPull,
   canPush,
@@ -246,6 +247,22 @@ describe("canPush と canRename", () => {
       const row = pick(rows, (item) => item.kind === kind);
       expect(canPush(row), kind).toBe(false);
       expect(canRename(row), kind).toBe(false);
+    }
+  });
+});
+
+/**
+ * サイドバーのフェッチの対象 (docs/adr/0026-clear-selection-on-empty-area.md)。
+ * 名前と動作が同じ判断を見る。別々に書くと、名前と実際の対象が食い違う
+ */
+describe("fetchTargetOf", () => {
+  it("選択が無ければ全リポジトリ", () => {
+    expect(fetchTargetOf(null)).toEqual({ kind: "all" });
+  });
+
+  it("どの種類の行を選んでいても、そのリポジトリ", () => {
+    for (const row of allKinds()) {
+      expect(fetchTargetOf(row), row.kind).toEqual({ kind: "repo", repoId: "r1" });
     }
   });
 });

@@ -36,7 +36,7 @@
 }
 
 .input:focus {
-  border-color: var(--track);
+  border-color: var(--ring);
 }
 
 /* 入力欄の右端に重ねる。虫眼鏡と左右対称の位置に置き、高さは入力欄に合わせる

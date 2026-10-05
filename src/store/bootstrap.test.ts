@@ -28,6 +28,8 @@ const DEFAULT_UI: UiState = {
   console_open: false,
   group_directories: true,
   local_only: false,
+  detail_open: true,
+  repo_colors: {},
 };
 
 function registration(id: string, name: string): RepoRegistration {

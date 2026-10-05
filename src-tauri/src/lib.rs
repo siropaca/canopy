@@ -63,6 +63,7 @@ pub fn invoke_handler<R: tauri::Runtime>()
         commands::ops::get_push_preview,
         commands::ops::reveal_in_finder,
         commands::ops::open_in_terminal,
+        commands::window::set_detail_open,
     ]
 }
 
@@ -178,11 +179,13 @@ pub fn run() {
                 .join(state::SETTINGS_FILE);
             let state = state::AppState::load(settings);
             let saved = state.initial_window();
+            let detail_open = state.initial_detail_open();
             app.manage(state);
 
-            // 位置を戻すのは 1 回だけ。中身を描く前に済ませる
+            // 位置を戻すのは 1 回だけ。中身を描く前に済ませる。
+            // 幅の下限は詳細ペインの開閉で決まるので、それも一緒に渡す
             if let Some(main) = window::main_window(app.handle()) {
-                window::restore(&main, saved);
+                window::restore(&main, saved, detail_open);
             }
             tray::install(app.handle())?;
 

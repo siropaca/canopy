@@ -5,31 +5,34 @@
 <title>Canopy</title>
 <style>
 :root{
-  /* 面と境界 */
-  --bg:#1e1f22; --panel:#2b2d30; --head:#3b3e43; --border:#393b40; --border2:#4a4d51;
-  --head-line:#222426; --overlay-line:#35383d; --on:#43464b; --on-border:#55585e;
+  /* 面と境界 (docs/adr/0027-neutral-dark-palette.md) */
+  --bg:#0a0a0a; --panel:#171717; --head:#262626; --border:#262626; --border2:#333333;
+  --head-line:#141414; --overlay-line:#262626; --on:#333333; --on-border:#404040;
 
   /* 文字 */
-  --fg:#dfe1e5; --dim:#6f737a; --faint:#54585e; --disabled:#4a4d51;
-  --fg-strong:#fff; --fg-mid:#b4b8be; --nohit:#787c82;
+  --fg:#fafafa; --dim:#a1a1a1; --faint:#737373; --disabled:#525252;
+  --fg-strong:#fff; --fg-mid:#d4d4d4; --nohit:#737373;
 
   /* 選択とホバー */
-  --hover:#2f3134; --sel:#3c3f41; --selfoc:#2e436e;
-  --head-sel:#4a4e54; --head-selfoc:#3d5a94; --head-nohit:#33363a;
+  --hover:#1f1f1f; --sel:#2e2e2e; --selfoc:#404040;
+  --head-sel:#363636; --head-selfoc:#555555; --head-nohit:#1a1a1a;
+
+  /* 見出しの色 (docs/adr/0024-repo-heading-color.md) */
+  --head-red:#5c3434; --head-orange:#5e4128; --head-yellow:#57502a; --head-green:#2f4a33; --head-blue:#2c4466; --head-purple:#4a3862;
 
   /* 意味の色 */
   --track:#548af7; --ahead:#62a85e; --wt:#b28fd0; --cur:#e8b73d; --dirty:#e8a33d;
-  --gone:#9a5f5f; --folder:#9aa0a6; --icon:#9aa0a6;
+  --gone:#9a5f5f; --folder:#a1a1a1; --icon:#a1a1a1;
 
   /* バッジと出力 */
   --track-bg:#26364f; --track-fg:#7ba7f5; --ahead-bg:#2b3d2e; --ahead-fg:#8ec98e;
-  --dirty-bg:#4a3c22; --badge-bg:#4a4d51; --badge-fg:#cfd2d6;
+  --dirty-bg:#4a3c22; --badge-bg:#333333; --badge-fg:#d4d4d4;
   --del:#c96a6a; --err:#c9534b; --err-line:#e06c6c;
-  --out:#c8ccd2; --out-dim:#7d8188; --graph:#3a4c6d; --menu-key:#cbd5ea;
+  --out:#d4d4d4; --out-dim:#a1a1a1; --graph:#404040; --menu-key:#d4d4d4;
 
   /* ボタン */
-  --btn:#365880; --btn-hover:#3f6294; --btn-border:#4b6eaf; --btn-face:#3a3d42;
-  --accent:#4b83f0; --accent-hover:#5a8ef4;
+  --btn:#e5e5e5; --btn-hover:#d4d4d4; --btn-border:#e5e5e5; --btn-face:#262626;
+  --accent:#e5e5e5; --accent-hover:#d4d4d4; --accent-fg:#171717; --ring:#737373;
   --danger:#a4453f; --danger-hover:#b8504a; --danger-face:#5a3535; --danger-fg:#f0d4d4;
 
   /* 寸法 */
@@ -44,7 +47,7 @@ button{background:transparent;border:1px solid transparent;color:var(--dim);
   font:inherit;padding:0 9px;height:22px;cursor:pointer;white-space:nowrap}
 button:hover{background:var(--hover);color:var(--fg)}
 button.on{background:var(--selfoc);color:var(--fg-strong);border-color:var(--btn-border)}
-button.pri{background:var(--btn);border-color:var(--btn-border);color:var(--fg-strong)}
+button.pri{background:var(--btn);border-color:var(--btn-border);color:var(--accent-fg)}
 button.pri:hover{background:var(--btn-hover)}
 button.danger:hover{background:var(--danger-face);color:var(--danger-fg)}
 
@@ -52,16 +55,16 @@ button.danger:hover{background:var(--danger-face);color:var(--danger-fg)}
   border-bottom:1px solid var(--border);padding:6px}
 .qbar input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--fg);
   height:27px;padding:0 25px;font:inherit;font-size:13px;outline:none;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236f737a' stroke-width='1.2'><circle cx='5' cy='5' r='3.2'/><path d='M7.5 7.5 10.5 10.5'/></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23a1a1a1' stroke-width='1.2'><circle cx='5' cy='5' r='3.2'/><path d='M7.5 7.5 10.5 10.5'/></svg>");
   background-repeat:no-repeat;background-position:6px 50%;background-size:14px}
-.qbar input:focus{border-color:var(--track)}
+.qbar input:focus{border-color:var(--ring)}
 .qbar .clr{position:absolute;top:6px;right:9px;bottom:6px;width:20px;padding:0;border:0;
   background:transparent;color:var(--dim);font-size:12px;line-height:1}
 .qbar .clr:hover{background:transparent;color:var(--fg-strong)}
 .dim{color:var(--dim)}
 .status{height:20px;line-height:20px;background:var(--panel);border-top:1px solid var(--border);
   padding:0 7px;color:var(--dim);font-size:12px;display:flex;gap:13px;align-items:center;
-  font-variant-numeric:tabular-nums}
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 /* 実行中。集計より先に出す (docs/adr/0023-progress-in-the-status-bar.md) */
 .status .busy{color:var(--fg-strong);display:inline-flex;align-items:center;gap:4px}
 svg.sp{width:11px;height:11px;flex:0 0 11px;stroke-width:1.35;
@@ -126,10 +129,14 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
   padding:2px 7px;font-size:12px;color:var(--fg);box-shadow:0 3px 10px rgba(0,0,0,.4);
   pointer-events:none;white-space:nowrap}
 .treepane{flex:0 0 360px;overflow:auto;outline:none}
+/* 詳細ペインを隠している間。残りの幅を全部使う (docs/adr/0025-hide-detail-pane.md) */
+.treepane.fill{flex:1 1 0;min-width:0}
 .splitter{flex:0 0 5px;cursor:col-resize;border-right:1px solid var(--border);
   background:transparent}
 .splitter:hover,.splitter.drag{background:var(--head-selfoc);border-right-color:var(--head-selfoc)}
 .block{position:relative}
+/* 最後の行の下の余白。選択を外すために押す所 (docs/adr/0026-clear-selection-on-empty-area.md) */
+#rows{padding-bottom:calc(var(--row) * 2)}
 .r{display:flex;align-items:center;gap:4px;height:var(--row);
   padding-left:calc(5px + var(--d,0) * 13px);padding-right:7px;cursor:default}
 .r:hover{background:var(--hover)}
@@ -140,10 +147,19 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
 .r.repo{background:var(--head);color:var(--fg-strong);font-weight:600;
   border-top:1px solid var(--border2);border-bottom:1px solid var(--head-line);
   position:sticky;top:40px;z-index:4}
+/* 見出しの色 (docs/adr/0024-repo-heading-color.md)。選択と薄い表示より前に書く */
+.r.repo[data-color="red"]{background:var(--head-red)}
+.r.repo[data-color="orange"]{background:var(--head-orange)}
+.r.repo[data-color="yellow"]{background:var(--head-yellow)}
+.r.repo[data-color="green"]{background:var(--head-green)}
+.r.repo[data-color="blue"]{background:var(--head-blue)}
+.r.repo[data-color="purple"]{background:var(--head-purple)}
 .r.repo.sel{background:var(--head-sel)}
 .treepane:focus .r.repo.sel{background:var(--head-selfoc)}
 .r.repo.nohit{color:var(--nohit);background:var(--head-nohit)}
 .r.repo.nohit .nm{font-weight:400}
+/* 実行中。文字だけ薄くして、見出しの色は残す (docs/adr/0024-repo-heading-color.md) */
+.r.repo.busy{color:var(--nohit)}
 .r.repo.dragging{opacity:.45}
 .r.repo.dropbefore{box-shadow:inset 0 2px 0 var(--track)}
 .r.repo.dropafter{box-shadow:inset 0 -2px 0 var(--track)}
@@ -181,13 +197,14 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
 .files .st.U{color:var(--dim)}
 .files .fp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .files .more{color:var(--disabled)}
-/* 無効なボタンはプライマリの地も外す。濃い青に --disabled の文字は読めない */
+/* 無効なボタンはプライマリの地も外す。プライマリの地に --disabled の文字は読めない */
 .acts button[disabled],.acts button[disabled]:hover{color:var(--disabled);
   background:transparent;border-color:var(--border);cursor:default}
 .empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--disabled)}
 
 .menu{position:fixed;z-index:50;background:var(--panel);border:1px solid var(--border2);
-  box-shadow:0 6px 20px rgba(0,0,0,.5);padding:4px 0;min-width:230px;max-width:560px}
+  box-shadow:0 6px 20px rgba(0,0,0,.5);padding:4px 0;min-width:230px;
+  max-width:min(560px, calc(100vw - 8px))}
 .menu .mi{height:24px;line-height:24px;padding:0 11px;white-space:nowrap;cursor:default;
   display:flex;align-items:center;gap:10px}
 .menu .mi:hover{background:var(--selfoc);color:var(--fg-strong)}
@@ -198,6 +215,15 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .menu .mi:hover .v{color:var(--menu-key)}
 .menu .mi .ar2{margin-left:auto;color:var(--dim)}
+/* 見出しの色の見本。見出しに塗る色そのもの */
+.menu .mi .sw{width:12px;height:12px;flex:0 0 12px;border:1px solid var(--border2)}
+.menu .mi .sw[data-swatch="none"]{background:var(--head)}
+.menu .mi .sw[data-swatch="red"]{background:var(--head-red)}
+.menu .mi .sw[data-swatch="orange"]{background:var(--head-orange)}
+.menu .mi .sw[data-swatch="yellow"]{background:var(--head-yellow)}
+.menu .mi .sw[data-swatch="green"]{background:var(--head-green)}
+.menu .mi .sw[data-swatch="blue"]{background:var(--head-blue)}
+.menu .mi .sw[data-swatch="purple"]{background:var(--head-purple)}
 .menu .mi.off{color:var(--faint)}
 .menu .mi.off:hover{background:transparent}
 .menu .hr{height:1px;background:var(--border);margin:4px 0}
@@ -207,7 +233,8 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
   display:flex;align-items:flex-start;justify-content:center;padding-top:22vh}
 .modal[hidden]{display:none}
 .modal .box{background:var(--panel);border:1px solid var(--border2);border-radius:8px;
-  box-shadow:0 16px 44px rgba(0,0,0,.6);padding:0 0 14px;width:440px;overflow:hidden}
+  box-shadow:0 16px 44px rgba(0,0,0,.6);padding:0 0 14px;width:440px;overflow:hidden;
+  max-width:calc(100vw - 32px)}
 .modal .box.wide{width:620px}
 .modal .tbar{display:flex;align-items:center;height:38px;padding:0 20px;
   border-bottom:1px solid var(--overlay-line)}
@@ -217,7 +244,7 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
 .modal .frow label{color:var(--fg);text-align:right;white-space:nowrap}
 .modal input[type=text]{width:100%;height:30px;padding:0 8px;background:var(--bg);
   border:1px solid var(--border2);border-radius:4px;color:var(--fg);font:inherit;outline:none}
-.modal input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.modal input[type=text]:focus{border-color:var(--ring);box-shadow:0 0 0 1px var(--ring)}
 .modal .prow{display:flex;align-items:center;gap:7px;min-width:0}
 .modal .prow b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   max-width:42%;flex:0 1 auto}
@@ -245,20 +272,21 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
 .modal .btns button{height:30px;padding:0 16px;border-radius:5px;
   border:1px solid var(--border2);color:var(--fg)}
 .modal .btns button:hover{background:var(--btn-face)}
+.modal .btns button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.modal .btns button.pri:hover{background:var(--accent-hover)}
+/* 無効はプライマリより後ろに置く。特異性が同じなので後が勝つ */
 .modal .btns button[disabled],.modal .btns button[disabled]:hover{color:var(--disabled);
   background:transparent;border-color:var(--border);cursor:default}
-.modal .btns button.pri{background:var(--accent);border-color:var(--accent);color:var(--fg-strong)}
-.modal .btns button.pri:hover{background:var(--accent-hover)}
 .toast{position:fixed;right:12px;bottom:30px;z-index:60;display:flex;flex-direction:column;
   gap:8px;align-items:flex-end}
 .toast .tst{display:flex;align-items:center;gap:11px;background:var(--sel);border-radius:8px;
-  padding:11px 16px;min-width:300px;max-width:560px;
+  padding:11px 16px;min-width:300px;max-width:min(560px, calc(100vw - 24px));
   box-shadow:0 10px 28px rgba(0,0,0,.5)}
 .toast .tst .ico{flex:0 0 18px;width:18px;height:18px;border-radius:50%;background:var(--accent);
-  color:var(--fg-strong);font-size:12px;font-weight:700;line-height:18px;text-align:center}
+  color:var(--accent-fg);font-size:12px;font-weight:700;line-height:18px;text-align:center}
 .toast .tst .msg{color:var(--fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast .tst .cwd{color:var(--fg-mid)}
-.toast .tst.err .ico{background:var(--err)}
+.toast .tst.err .ico{background:var(--err);color:var(--fg-strong)}
 .toast .tst .lnk{color:var(--track-fg);margin-left:4px;cursor:default;white-space:nowrap}
 .toast .tst .lnk:hover{text-decoration:underline}
 .toast .tst code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
@@ -275,7 +303,7 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
       <svg viewBox="0 0 16 16"><path d="M3.5 4.8h9M6.2 4.8V3.2h3.6v1.6M5.2 4.8 6 13h4l.8-8.2"/></svg></button>
     <button class="sb" data-a="refresh" data-tip="更新">
       <svg viewBox="0 0 16 16"><path d="M11.5 4.5A5 5 0 1 1 8 3"/><path d="M6.4 1.6 8 3 6.4 4.4"/></svg></button>
-    <button class="sb" data-a="fetch-strip" data-tip="フェッチ">
+    <button class="sb" data-a="fetch-strip" data-tip="フェッチ (すべて)">
       <svg viewBox="0 0 16 16"><path d="M13 3.5 5.6 10.9" stroke-dasharray="2.4 1.9"/><path d="M5.6 7.1v3.8h3.8"/></svg></button>
     <button class="sb off" data-a="pull-selected" data-tip="選択対象をプル">
       <svg viewBox="0 0 16 16"><path d="M13 3.5 5.6 10.9"/><path d="M5.6 7.1v3.8h3.8"/></svg></button>
@@ -300,6 +328,9 @@ svg.dt{width:11px;height:11px;flex:0 0 11px;fill:currentColor;stroke:none}
     <button class="sb" data-a="toggle-console" data-tip="コンソール">
       <svg viewBox="0 0 16 16"><path d="M2.2 3h11.6v10H2.2z"/>
         <path d="M4.6 6.6 6.4 8.2 4.6 9.8M8.2 10h3"/></svg></button>
+    <button class="sb on" data-a="toggle-detail" data-tip="詳細パネル">
+      <svg viewBox="0 0 16 16"><path d="M2.2 3h11.6v10H2.2z"/>
+        <path d="M9.4 3v10M10.9 6h1.4M10.9 8h1.4"/></svg></button>
   </div>
   <div class="treepane" id="tree" tabindex="0">
     <div class="qbar"><input id="q" placeholder="ブランチまたはタグ">
@@ -359,7 +390,8 @@ function fileList(files,limit){
     <div class="files">${rows}${rest>0?`<div class="f more">他 ${rest} 件</div>`:""}</div>`;
 }
 
-let q="", selId=null, dragName=null, grouping=true, localOnly=false;
+let q="", selId=null, dragName=null, grouping=true, localOnly=false, detailOpen=true;
+const colors=new Map();        // リポジトリ名 -> 見出しの色 (実装は id を鍵にする)
 const flat=[];
 
 /* ---- 折りたたみ。キーはリポジトリ名ベース (並び替えても壊れない) ---- */
@@ -468,7 +500,8 @@ function render(){
   for(const r of repos()){
     const key=`${r.n}|repo|`, open=isOpen(key), n=q?hits(r):1;
     h+=`<div class="block">`;                        // 見出しの sticky をこの中で閉じる
-    h+=push(`<div class="r repo${n?"":" nohit"}" draggable="true" data-repo="${esc(r.n)}" style="--d:0">
+    const color=colors.has(r.n)?` data-color="${colors.get(r.n)}"`:"";
+    h+=push(`<div class="r repo${n?"":" nohit"}"${color} draggable="true" data-repo="${esc(r.n)}" style="--d:0">
       ${IC.chev(open)}<span class="nm">${esc(r.n)}</span><span class="sp"></span>
       ${open?"":`${r.dirty?`<span class="badge d">${IC.dot}${r.dirty}</span>`:""}
       ${behindSum(r)?`<span class="badge b">${IC.down}${behindSum(r)}</span>`:""}
@@ -509,6 +542,9 @@ function paintSel(){
     ?.classList.toggle("off",kind!=="repo");
   strip.querySelector('.sb[data-a="pull-selected"]')
     ?.classList.toggle("off",!(kind==="repo"||kind==="local"));
+  // フェッチの名前に対象を出す (docs/adr/0026-clear-selection-on-empty-area.md)
+  strip.querySelector('.sb[data-a="fetch-strip"]').dataset.tip=
+    i>=0?`フェッチ (${flat[i].repo.n})`:"フェッチ (すべて)";
   const b=flat[i]?.branch;
   strip.querySelector('.sb[data-a="delete-branch"]')
     ?.classList.toggle("off",!(kind==="local"&&b&&!b.cur&&!b.wtName));
@@ -725,6 +761,12 @@ function renderConsole(){
 function act(a){
   const m=flat.find(x=>x.id===selId);
   const r=m?.repo, b=m?.branch, cur=r?curOf(r):null, R=r?r.n:"";
+  if(a.startsWith("color:")){                  // 見出しの色。git は実行しない
+    const c=a.slice(6);
+    if(c) colors.set(R,c); else colors.delete(R);
+    selId=null;                                 // 選択の色が勝つので、外して結果を見せる
+    render(); return;
+  }
   const n=b?b.name:"", local=b?b.name.replace(/^origin\//,""):"";
   ({
     checkout:()=>run(`git checkout ${local}`,R),
@@ -757,6 +799,16 @@ function act(a){
       render();
     },
     "toggle-console":()=>{ cOpen=!cOpen; renderConsole(); },
+    // 詳細ペインを隠す。実物はウィンドウの幅の下限も 360px に下げる
+    "toggle-detail":()=>{
+      detailOpen=!detailOpen;
+      detail.hidden=!detailOpen; sp.hidden=!detailOpen;
+      tree.classList.toggle("fill",!detailOpen);
+      // スプリッタで決めた幅は残しておき、戻したときに同じ幅で出す
+      if(!detailOpen){ tree.dataset.basis=tree.style.flexBasis; tree.style.flexBasis=""; }
+      else tree.style.flexBasis=tree.dataset.basis||"";
+      strip.querySelector('.sb[data-a="toggle-detail"]').classList.toggle("on",detailOpen);
+    },
     "toggle-local":()=>{
       localOnly=!localOnly;
       strip.querySelector('.sb[data-a="toggle-local"]').classList.toggle("on",localOnly);
@@ -896,7 +948,7 @@ function showMenu(items,x,y,level){
   closeMenus(level);
   const el=document.createElement("div"); el.className="menu";
   el.innerHTML=items.map((it,i)=>it.hr?`<div class="hr"></div>`:it.ttl?`<div class="ttl">${esc(it.ttl)}</div>`
-    :`<div class="mi${it.off?" off":""}" data-i="${i}"><span>${esc(it.l)}</span>
+    :`<div class="mi${it.off?" off":""}" data-i="${i}">${it.sw?`<span class="sw" data-swatch="${it.sw}"></span>`:""}<span>${esc(it.l)}</span>
       ${it.k?`<span class="k${it.v?"":" far"}">${it.k}</span>`:""}
       ${it.v?`<span class="v">${esc(it.v)}</span>`:""}
       ${it.sub?`<span class="ar2">›</span>`:""}</div>`).join("");
@@ -976,6 +1028,15 @@ function menuFor(m){
       {hr:1},
       {l:"GitHub リポジトリ URL",a:"copy-url",v:r.url},
     ]},
+    {l:"見出しの色",sub:[
+      {l:"なし",a:"color:",sw:"none"},
+      {l:"赤",a:"color:red",sw:"red"},
+      {l:"オレンジ",a:"color:orange",sw:"orange"},
+      {l:"黄",a:"color:yellow",sw:"yellow"},
+      {l:"緑",a:"color:green",sw:"green"},
+      {l:"青",a:"color:blue",sw:"blue"},
+      {l:"紫",a:"color:purple",sw:"purple"},
+    ]},
     {hr:1},
     {l:"Finder で表示",a:"reveal"},
     {l:"ターミナルで開く",a:"terminal"},
@@ -991,7 +1052,15 @@ const tree=document.getElementById("tree"), rowsEl=document.getElementById("rows
       qEl=document.getElementById("q"), strip=document.getElementById("strip");
 const metaAt=el=>flat[+el.dataset.i];
 tree.addEventListener("mousedown",e=>{
-  const row=e.target.closest(".r[data-i]"); if(!row) return;
+  const row=e.target.closest(".r[data-i]");
+  if(!row){
+    // 行が無い所を押すと選択を外す (docs/adr/0026-clear-selection-on-empty-area.md)。
+    // 左ボタンだけ。検索欄とスクロールバー (中身の幅より右) は除く
+    // Ctrl+クリックは右クリックと同じなので除く
+    if(e.button===0&&!e.ctrlKey&&!e.target.closest(".qbar")&&e.clientX<tree.getBoundingClientRect().left+tree.clientWidth)
+      setSel(null);
+    return;
+  }
   setSel(metaAt(row).id);
   if(e.button===0&&e.target.closest("svg.chev")) toggle();
 });

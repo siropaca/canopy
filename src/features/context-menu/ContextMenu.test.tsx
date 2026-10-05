@@ -25,6 +25,23 @@ const ITEMS: MenuItem[] = [
   },
 ];
 
+const COLOR_ITEMS: MenuItem[] = [
+  {
+    kind: "action",
+    label: "なし",
+    action: { type: "setColor", color: null },
+    disabled: false,
+    swatch: "none",
+  },
+  {
+    kind: "action",
+    label: "紫",
+    action: { type: "setColor", color: "purple" },
+    disabled: false,
+    swatch: "purple",
+  },
+];
+
 function renderMenu(items: MenuItem[] = ITEMS) {
   const onAction = vi.fn();
   const onClose = vi.fn();
@@ -80,6 +97,31 @@ describe("コンテキストメニュー", () => {
       type: "copy",
       text: "/repos/acme-api",
     });
+  });
+
+  /** 見本は見出しに塗る色そのもの (docs/adr/0024-repo-heading-color.md) */
+  it("色見本を項目名の左に出す", () => {
+    renderMenu(COLOR_ITEMS);
+
+    const swatchOf = (label: string) =>
+      screen.getByText(label).closest("button")?.firstElementChild?.getAttribute("data-swatch");
+
+    expect(swatchOf("なし")).toBe("none");
+    expect(swatchOf("紫")).toBe("purple");
+  });
+
+  it("色見本の無い項目には出さない", () => {
+    renderMenu();
+
+    expect(document.querySelector("[data-swatch]")).toBeNull();
+  });
+
+  it("色の項目を押すとその色を付ける操作を渡す", () => {
+    const { onAction } = renderMenu(COLOR_ITEMS);
+
+    fireEvent.click(screen.getByText("紫"));
+
+    expect(onAction).toHaveBeenCalledExactlyOnceWith({ type: "setColor", color: "purple" });
   });
 
   it("他の項目をホバーするとサブメニューが閉じる", () => {

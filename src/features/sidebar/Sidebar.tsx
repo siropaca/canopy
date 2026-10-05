@@ -9,6 +9,9 @@ import { Tooltip } from "./Tooltip";
  *
  * フェッチは選択があればそのリポジトリ、無ければ全リポジトリ (docs/specs/ui.md)。
  * **一括フェッチの最中は無効。** 有効条件は `shared/lib/selection.ts` が決める。
+ * **名前に対象を出す** (`フェッチ (すべて)` / `フェッチ (<リポジトリ名>)`)。
+ * 押す前にどちらになるか分からないのが迷う原因だった
+ * (docs/adr/0026-clear-selection-on-empty-area.md)。
  *
  * 「更新」は常に有効。状態を取り直すだけでネットワークを触らないので、
  * 実行中でも押せる (飛ばす判定は `store/refresh.ts`)。
@@ -22,6 +25,8 @@ interface SidebarProps {
   readonly pullEnabled: boolean;
   /** 選択中のリポジトリに実行中の操作があると無効 */
   readonly fetchEnabled: boolean;
+  /** フェッチの対象のリポジトリ名。`null` なら全リポジトリ */
+  readonly fetchTarget: string | null;
   /** 「リストから削除」を有効にできるか (shared/lib/selection.ts) */
   readonly removeEnabled: boolean;
   /** 「ブランチの削除」を有効にできるか (shared/lib/selection.ts) */
@@ -29,6 +34,8 @@ interface SidebarProps {
   readonly groupDirectories: boolean;
   readonly localOnly: boolean;
   readonly consoleOpen: boolean;
+  /** 詳細ペインを出しているか (docs/adr/0025-hide-detail-pane.md) */
+  readonly detailOpen: boolean;
   readonly onRefresh: () => void;
   readonly onFetch: () => void;
   readonly onPull: () => void;
@@ -41,16 +48,19 @@ interface SidebarProps {
   readonly onToggleGroup: () => void;
   readonly onToggleLocalOnly: () => void;
   readonly onToggleConsole: () => void;
+  readonly onToggleDetail: () => void;
 }
 
 export function Sidebar({
   pullEnabled,
   fetchEnabled,
+  fetchTarget,
   removeEnabled,
   deleteEnabled,
   groupDirectories,
   localOnly,
   consoleOpen,
+  detailOpen,
   onRefresh,
   onFetch,
   onPull,
@@ -63,6 +73,7 @@ export function Sidebar({
   onToggleGroup,
   onToggleLocalOnly,
   onToggleConsole,
+  onToggleDetail,
 }: SidebarProps) {
   return (
     <div className={styles.strip}>
@@ -75,7 +86,11 @@ export function Sidebar({
       <Button label="更新" onClick={onRefresh}>
         <icons.Refresh />
       </Button>
-      <Button label="フェッチ" disabled={!fetchEnabled} onClick={onFetch}>
+      <Button
+        label={`フェッチ (${fetchTarget ?? "すべて"})`}
+        disabled={!fetchEnabled}
+        onClick={onFetch}
+      >
         <icons.Fetch />
       </Button>
       <Button label="選択対象をプル" disabled={!pullEnabled} onClick={onPull}>
@@ -113,6 +128,9 @@ export function Sidebar({
 
       <Button label="コンソール" active={consoleOpen} onClick={onToggleConsole}>
         <icons.Console />
+      </Button>
+      <Button label="詳細パネル" active={detailOpen} onClick={onToggleDetail}>
+        <icons.DetailPane />
       </Button>
     </div>
   );

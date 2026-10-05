@@ -5,33 +5,41 @@
  * それぞれの用途は docs/design-system.md にある。
  */
 :root {
-  /* 面と境界 */
-  --bg: #1e1f22;
-  --panel: #2b2d30;
-  --head: #3b3e43;
-  --border: #393b40;
-  --border2: #4a4d51;
-  --head-line: #222426;
-  --overlay-line: #35383d;
-  --on: #43464b;
-  --on-border: #55585e;
+  /* 面と境界 (docs/adr/0027-neutral-dark-palette.md) */
+  --bg: #0a0a0a;
+  --panel: #171717;
+  --head: #262626;
+  --border: #262626;
+  --border2: #333333;
+  --head-line: #141414;
+  --overlay-line: #262626;
+  --on: #333333;
+  --on-border: #404040;
 
   /* 文字 */
-  --fg: #dfe1e5;
-  --dim: #6f737a;
-  --faint: #54585e;
-  --disabled: #4a4d51;
+  --fg: #fafafa;
+  --dim: #a1a1a1;
+  --faint: #737373;
+  --disabled: #525252;
   --fg-strong: #fff;
-  --fg-mid: #b4b8be;
-  --nohit: #787c82;
+  --fg-mid: #d4d4d4;
+  --nohit: #737373;
 
   /* 選択とホバー */
-  --hover: #2f3134;
-  --sel: #3c3f41;
-  --selfoc: #2e436e;
-  --head-sel: #4a4e54;
-  --head-selfoc: #3d5a94;
-  --head-nohit: #33363a;
+  --hover: #1f1f1f;
+  --sel: #2e2e2e;
+  --selfoc: #404040;
+  --head-sel: #363636;
+  --head-selfoc: #555555;
+  --head-nohit: #1a1a1a;
+
+  /* 見出しの色 (docs/adr/0024-repo-heading-color.md) */
+  --head-red: #5c3434;
+  --head-orange: #5e4128;
+  --head-yellow: #57502a;
+  --head-green: #2f4a33;
+  --head-blue: #2c4466;
+  --head-purple: #4a3862;
 
   /* 意味の色 */
   --track: #548af7;
@@ -40,8 +48,8 @@
   --cur: #e8b73d;
   --dirty: #e8a33d;
   --gone: #9a5f5f;
-  --folder: #9aa0a6;
-  --icon: #9aa0a6;
+  --folder: #a1a1a1;
+  --icon: #a1a1a1;
 
   /* バッジと出力 */
   --track-bg: #26364f;
@@ -49,23 +57,25 @@
   --ahead-bg: #2b3d2e;
   --ahead-fg: #8ec98e;
   --dirty-bg: #4a3c22;
-  --badge-bg: #4a4d51;
-  --badge-fg: #cfd2d6;
+  --badge-bg: #333333;
+  --badge-fg: #d4d4d4;
   --del: #c96a6a;
   --err: #c9534b;
   --err-line: #e06c6c;
-  --out: #c8ccd2;
-  --out-dim: #7d8188;
-  --graph: #3a4c6d;
-  --menu-key: #cbd5ea;
+  --out: #d4d4d4;
+  --out-dim: #a1a1a1;
+  --graph: #404040;
+  --menu-key: #d4d4d4;
 
   /* ボタン */
-  --btn: #365880;
-  --btn-hover: #3f6294;
-  --btn-border: #4b6eaf;
-  --btn-face: #3a3d42;
-  --accent: #4b83f0;
-  --accent-hover: #5a8ef4;
+  --btn: #e5e5e5;
+  --btn-hover: #d4d4d4;
+  --btn-border: #e5e5e5;
+  --btn-face: #262626;
+  --accent: #e5e5e5;
+  --accent-hover: #d4d4d4;
+  --accent-fg: #171717;
+  --ring: #737373;
   --danger: #a4453f;
   --danger-hover: #b8504a;
   --danger-face: #5a3535;

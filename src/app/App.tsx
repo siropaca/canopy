@@ -14,10 +14,11 @@ import { Sidebar } from "@/features/sidebar/Sidebar";
 import { StatusBar } from "@/features/status-bar/StatusBar";
 import { Toasts } from "@/features/toast/Toasts";
 import { messageOf } from "@/shared/lib/errorMessage";
-import { canDelete, canFetch, canPull, canRemoveRepo } from "@/shared/lib/selection";
+import { canDelete, canFetch, canPull, canRemoveRepo, fetchTargetOf } from "@/shared/lib/selection";
 import { Splitter } from "@/shared/ui/Splitter";
 import { addRepository, loadEverything, removeRepository } from "@/store/bootstrap";
 import { toggleConsolePanel } from "@/store/consoleActions";
+import { toggleDetailPane } from "@/store/detailPaneActions";
 import { listenForRepoChanges, listenForRepoUpdates, watchWindowVisibility } from "@/store/events";
 import { notifyFailure } from "@/store/notify";
 import {
@@ -43,7 +44,8 @@ import { useRowActions } from "./useRowActions";
 /*
  * 画面の組み立て。構成は docs/specs/ui.md の「画面の構成」。
  *
- * ヘッダーは持たない。詳細ペインは常に表示する。
+ * ヘッダーは持たない。詳細ペインはサイドバーの `詳細パネル` で隠せる
+ * (docs/adr/0025-hide-detail-pane.md)。
  */
 
 /**
@@ -109,7 +111,18 @@ export function App() {
       groupDirectories: state.groupDirectories,
       localOnly: state.localOnly,
       consoleOpen: state.consoleOpen,
+      detailOpen: state.detailOpen,
     })),
+  );
+  // サイドバーのフェッチの対象。名前と動作の両方がこれを見る
+  // (docs/adr/0026-clear-selection-on-empty-area.md)
+  const fetchTarget = useMemo(() => fetchTargetOf(selectedRow), [selectedRow]);
+  // 見えている選択はストアのリポジトリから平坦化した行なので名前は引ける。
+  // 引けなかったときに `すべて` と出すと、名前と実際の対象 (1 件) が食い違うので id を出す
+  const fetchTargetName = useRepoStore((state) =>
+    fetchTarget.kind === "all"
+      ? null
+      : (state.byId.get(fetchTarget.repoId)?.name ?? fetchTarget.repoId),
   );
 
   // 一括フェッチの最中は「すべてフェッチ」を無効にする (docs/specs/ui.md)
@@ -138,12 +151,16 @@ export function App() {
 
   /** サイドバーのフェッチ。選択があればそのリポジトリ、無ければ全リポジトリ */
   const onFetch = useCallback(() => {
-    if (selectedRow === null) {
+    if (fetchTarget.kind === "all") {
       void fetchAllRepositories();
       return;
     }
-    void fetchRepository(selectedRow.repoId);
-  }, [selectedRow]);
+    void fetchRepository(fetchTarget.repoId);
+  }, [fetchTarget]);
+
+  const onToggleDetail = useCallback(() => {
+    void toggleDetailPane();
+  }, []);
 
   const onPullSelection = useCallback(() => {
     if (selectedRow !== null) void pullRow(selectedRow);
@@ -178,11 +195,13 @@ export function App() {
         <Sidebar
           pullEnabled={canPull(selectedRow)}
           fetchEnabled={canFetch(selectedRow, bulkRunning)}
+          fetchTarget={fetchTargetName}
           removeEnabled={canRemoveRepo(selectedRow)}
           deleteEnabled={canDelete(selectedRow)}
           groupDirectories={toggles.groupDirectories}
           localOnly={toggles.localOnly}
           consoleOpen={toggles.consoleOpen}
+          detailOpen={toggles.detailOpen}
           onRefresh={onRefresh}
           onFetch={onFetch}
           onPull={onPullSelection}
@@ -203,12 +222,18 @@ export function App() {
           onToggleGroup={toggleGroupDirectories}
           onToggleLocalOnly={toggleLocalOnly}
           onToggleConsole={toggleConsolePanel}
+          onToggleDetail={onToggleDetail}
         />
-        <TreePane>
+        <TreePane fill={!toggles.detailOpen}>
           <RepoTree rows={rows} onActivate={actions.activate} onContextMenu={actions.openMenu} />
         </TreePane>
-        <Splitter widthAt={readPaneWidth} onWidth={setPaneWidth} />
-        <DetailPane row={selectedRow} actions={detailActions} />
+        {/* 隠している間はツリーが残りの幅を全部使う (docs/adr/0025-hide-detail-pane.md) */}
+        {toggles.detailOpen && (
+          <>
+            <Splitter widthAt={readPaneWidth} onWidth={setPaneWidth} />
+            <DetailPane row={selectedRow} actions={detailActions} />
+          </>
+        )}
       </div>
       <ConsolePanel />
       <StatusBar />

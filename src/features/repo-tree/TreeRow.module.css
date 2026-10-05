@@ -98,6 +98,35 @@
   font-weight: 600;
 }
 
+/*
+ * 見出しの色 (docs/adr/0024-repo-heading-color.md)。
+ * **選択と薄い表示より前に書く。** 詳細度が同じなので、後ろに書いた方が勝つ
+ * (headingColor.test.ts が並び順を見ている)。
+ */
+.row.heading[data-color="red"] {
+  background: var(--head-red);
+}
+
+.row.heading[data-color="orange"] {
+  background: var(--head-orange);
+}
+
+.row.heading[data-color="yellow"] {
+  background: var(--head-yellow);
+}
+
+.row.heading[data-color="green"] {
+  background: var(--head-green);
+}
+
+.row.heading[data-color="blue"] {
+  background: var(--head-blue);
+}
+
+.row.heading[data-color="purple"] {
+  background: var(--head-purple);
+}
+
 .row.heading.selected {
   background: var(--head-sel);
 }
@@ -114,6 +143,11 @@
 
 .row.heading.dimmed .name {
   font-weight: 400;
+}
+
+/* 実行中。文字だけ薄くして、背景 (見出しの色) は塗り替えない (docs/adr/0024-repo-heading-color.md) */
+.row.heading.busy {
+  color: var(--nohit);
 }
 
 .note {

@@ -1,4 +1,6 @@
+import type { RepoColor } from "@/ipc/generated/RepoColor";
 import type { BranchRow, RefRow, RepoRow, RepoState, RowNode } from "@/ipc/types";
+import { REPO_COLORS, repoColorLabel } from "@/shared/lib/repoColors";
 import {
   canCheckout,
   canCheckoutAndPull,
@@ -37,7 +39,12 @@ export type MenuAction =
   | { readonly type: "terminal" }
   | { readonly type: "addRepo" }
   | { readonly type: "removeRepo" }
-  | { readonly type: "copy"; readonly text: string };
+  | { readonly type: "copy"; readonly text: string }
+  /** 見出しの色。`null` で外す (docs/adr/0024-repo-heading-color.md) */
+  | { readonly type: "setColor"; readonly color: RepoColor | null };
+
+/** 色見本。`none` は色を付けていない見出しの既定のグレー */
+export type Swatch = RepoColor | "none";
 
 export type MenuItem =
   | {
@@ -47,6 +54,8 @@ export type MenuItem =
       readonly disabled: boolean;
       /** 項目名の右に薄く出す実際の値 (コピーのサブメニュー) */
       readonly value?: string;
+      /** 項目名の左に出す色見本 (見出しの色のサブメニュー) */
+      readonly swatch?: Swatch;
     }
   /** v2 の項目。押しても何も起きない */
   | { readonly kind: "v2"; readonly label: string }
@@ -104,6 +113,8 @@ function repositoryItems(row: RepoRow, repo: RepoState, options: MenuOptions): M
     action("すべてフェッチ", { type: "fetchAll" }, !canFetch(null, options.bulkFetchRunning)),
     SEPARATOR,
     { kind: "submenu", label: "パス/参照のコピー", items: copyItems(repo) },
+    // git を実行しないので、実行中でも押せる
+    { kind: "submenu", label: "見出しの色", items: colorItems() },
     SEPARATOR,
     action("Finder で表示", { type: "reveal" }),
     action("ターミナルで開く", { type: "terminal" }),
@@ -112,6 +123,25 @@ function repositoryItems(row: RepoRow, repo: RepoState, options: MenuOptions): M
     action("リストから削除", { type: "removeRepo" }, !canRemoveRepo(row)),
   );
   return items;
+}
+
+/** 見出しの色。`なし` が先頭 (docs/specs/ui.md の「コンテキストメニュー」) */
+function colorItems(): MenuItem[] {
+  return [
+    colorItem("なし", null),
+    ...REPO_COLORS.map((color) => colorItem(repoColorLabel(color), color)),
+  ];
+}
+
+/** 見本は付ける色から導く。色を付けない項目は既定のグレー */
+function colorItem(label: string, color: RepoColor | null): MenuItem {
+  return {
+    kind: "action",
+    label,
+    action: { type: "setColor", color },
+    disabled: false,
+    swatch: color ?? "none",
+  };
 }
 
 /** 項目名の右に実際の値を薄く出す。**サブメニューだけ** (docs/specs/ui.md) */

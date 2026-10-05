@@ -118,3 +118,13 @@ export function Console() {
     </svg>
   );
 }
+
+/** 詳細パネル。窓の右側に仕切りを入れた形 (docs/adr/0025-hide-detail-pane.md) */
+export function DetailPane() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.2 3h11.6v10H2.2z" />
+      <path d="M9.4 3v10M10.9 6h1.4M10.9 8h1.4" />
+    </svg>
+  );
+}

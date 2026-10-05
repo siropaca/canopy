@@ -24,6 +24,11 @@ pub struct AppState {
     queue: GitQueue,
     /// Geometry read at startup. 復元は `setup` で 1 回だけ行う。
     initial_window: Option<WindowState>,
+    /// Whether the detail pane was shown when the app last saved its UI state.
+    ///
+    /// ウィンドウの幅の下限を、位置を戻す前に決めるためのもの
+    /// (docs/adr/0025-hide-detail-pane.md)。
+    initial_detail_open: bool,
     /// Latest geometry after the user moved or resized the window.
     ///
     /// **ここに控えるだけで書き込まない。** `Moved` / `Resized` はドラッグ中に
@@ -96,11 +101,16 @@ impl AppState {
             eprintln!("canopy: {reason}");
         }
         let initial_window = settings.as_ref().ok().and_then(Registry::window);
+        // 読めないときは既定 (表示) で起動する
+        let initial_detail_open = settings
+            .as_ref()
+            .map_or(true, |registry| registry.ui_state().detail_open);
         Self {
             settings_path,
             settings: Mutex::new(settings),
             queue: GitQueue::default(),
             initial_window,
+            initial_detail_open,
             moved_window: std::sync::Mutex::new(None),
             quiet: Quiet::default(),
         }
@@ -109,6 +119,11 @@ impl AppState {
     /// Where the window was when the app last exited.
     pub fn initial_window(&self) -> Option<WindowState> {
         self.initial_window
+    }
+
+    /// Whether the detail pane was shown at startup.
+    pub fn initial_detail_open(&self) -> bool {
+        self.initial_detail_open
     }
 
     /// Remember where the window is now. **設定ファイルには書かない。**
@@ -227,6 +242,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::UiState;
 
     fn geometry(x: f64, y: f64, width: f64, height: f64) -> WindowState {
         WindowState {
@@ -235,6 +251,41 @@ mod tests {
             width,
             height,
         }
+    }
+
+    /// 保存してある詳細ペインの開閉を起動時に返す。ウィンドウの幅の下限はこれで決まる。
+    /// **フロントの読み込みを待たない。** 待つと細く保存したウィンドウを 720px の下限で戻してしまう
+    /// (docs/adr/0025-hide-detail-pane.md)
+    #[tokio::test]
+    async fn reads_whether_the_detail_pane_was_hidden_at_startup() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let settings = directory.path().join("canopy.json");
+        let before = AppState::load(settings.clone());
+        let hidden = UiState {
+            detail_open: false,
+            ..UiState::default()
+        };
+        before
+            .write(|registry| registry.set_ui_state(hidden))
+            .await
+            .expect("save should succeed");
+
+        let after = AppState::load(settings);
+
+        assert!(!after.initial_detail_open());
+    }
+
+    /// 設定ファイルが無い・読めないときは表示として扱う (既定)
+    #[test]
+    fn treats_the_detail_pane_as_shown_without_a_settings_file() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let missing = AppState::load(directory.path().join("canopy.json"));
+        let broken_path = directory.path().join("broken.json");
+        std::fs::write(&broken_path, "{").expect("write");
+        let broken = AppState::load(broken_path);
+
+        assert!(missing.initial_detail_open());
+        assert!(broken.initial_detail_open());
     }
 
     /// 設定ファイルから読んだウィンドウの位置とサイズを返す。

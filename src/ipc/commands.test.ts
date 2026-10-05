@@ -7,7 +7,7 @@ import { COMMANDS, EVENTS } from "./commands";
 
 const LIB_RS = fileURLToPath(new URL("../../src-tauri/src/lib.rs", import.meta.url));
 /** コマンドを定義しているファイル。増やしたらここに足す (src-tauri/src/commands/mod.rs) */
-const COMMAND_RS = ["settings", "snapshot", "ops"].map((name) =>
+const COMMAND_RS = ["settings", "snapshot", "ops", "window"].map((name) =>
   fileURLToPath(new URL(`../../src-tauri/src/commands/${name}.rs`, import.meta.url)),
 );
 /** イベント名の定数を置いているファイル。増やしたらここに足す */
@@ -15,7 +15,7 @@ const EVENT_RS = ["commands/ops.rs", "watch.rs"].map((name) =>
   fileURLToPath(new URL(`../../src-tauri/src/${name}`, import.meta.url)),
 );
 /** invoke を呼んでいるラッパ */
-const WRAPPERS_TS = ["repos", "ops"].map((name) =>
+const WRAPPERS_TS = ["repos", "ops", "window"].map((name) =>
   fileURLToPath(new URL(`./${name}.ts`, import.meta.url)),
 );
 
@@ -84,6 +84,11 @@ export function readInvokedArguments(source: string): Record<string, string[]> {
       .map((entry) => entry.split(":")[0]?.trim() ?? entry);
   }
   return calls;
+}
+
+/** git-operations.md の表の IPC の列 (2 列目) に書いてあるコマンド名を読む */
+export function readDocumentedCommands(source: string): string[] {
+  return [...source.matchAll(/^\|[^|\n]*\|\s*`(\w+)`\s*\|/gm)].map(([, name]) => name ?? "");
 }
 
 /** Rust 側が emit しているイベント名を読む */
@@ -162,6 +167,36 @@ describe("コマンドの名前", () => {
       expect(key).toMatch(/^[a-z][A-Za-z]*$/);
       expect(value).toMatch(/^[a-z][a-z_]*$/);
     }
+  });
+});
+
+/**
+ * docs/security.md は「フロントから呼べるコマンドは、あの表を数えれば全部になる」を
+ * IPC の境界の前提にしている。表に載せ忘れると、監査からそのコマンドが漏れる
+ * (フェーズ 7 で `set_detail_open` を載せ忘れた)
+ */
+describe("コマンドの表 (docs/specs/git-operations.md)", () => {
+  const TABLE = fileURLToPath(new URL("../../docs/specs/git-operations.md", import.meta.url));
+
+  it("フロントから呼べるコマンドがすべて表の IPC の列にある", () => {
+    const documented = readDocumentedCommands(readFileSync(TABLE, "utf8"));
+
+    for (const command of Object.values(COMMANDS)) {
+      expect(documented, `${command} が git-operations.md の表に無い`).toContain(command);
+    }
+  });
+});
+
+describe("readDocumentedCommands", () => {
+  it("表の 2 列目の `名前` だけを読む", () => {
+    const source = [
+      "| 操作 | IPC | 実装 |",
+      "| --- | --- | --- |",
+      "| フェッチ | `fetch_repo` | `git fetch --prune` |",
+      "本文の `not_a_command` は読まない",
+    ].join("\n");
+
+    expect(readDocumentedCommands(source)).toEqual(["fetch_repo"]);
   });
 });
 

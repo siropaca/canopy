@@ -22,7 +22,7 @@ pub use head::{Head, HeadKind};
 pub use reference::Ref;
 pub use registration::{AddRepoOutcome, RepoRegistration};
 pub use snapshot::RepoSnapshot;
-pub use ui_state::{DEFAULT_PANE_WIDTH, UiState, WindowState};
+pub use ui_state::{DEFAULT_PANE_WIDTH, RepoColor, RepoColors, UiState, WindowState};
 pub use worktree::Worktree;
 
 /// Assert that every key serde emits also appears in the generated TypeScript

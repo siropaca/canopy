@@ -309,6 +309,53 @@ describe("見出しを薄くする / 選択を塗る", () => {
   });
 });
 
+describe("見出しの色 (docs/adr/0024-repo-heading-color.md)", () => {
+  function headingOf(rows: RowNode[]): RowNode {
+    return findRow(rows, (candidate) => candidate.kind === "repo");
+  }
+
+  it("色を付けた見出しに色の名前を出す。塗るのは CSS", () => {
+    const heading = headingOf(rowsOf({ local: [makeBranch("main")] }));
+
+    expect(renderRow(heading, { color: "purple" }).element.getAttribute("data-color")).toBe(
+      "purple",
+    );
+    expect(renderRow(heading, { color: "orange" }).element.getAttribute("data-color")).toBe(
+      "orange",
+    );
+  });
+
+  it("色を付けていない見出しには出さない", () => {
+    const heading = headingOf(rowsOf({ local: [makeBranch("main")] }));
+
+    expect(renderRow(heading).element.hasAttribute("data-color")).toBe(false);
+    expect(renderRow(heading, { color: null }).element.hasAttribute("data-color")).toBe(false);
+  });
+
+  /** 色は見出しだけ。ブランチの行には渡されても出さない */
+  it("見出し以外の行には出さない", () => {
+    const branch = findRow(rowsOf({ local: [makeBranch("main")] }), (row) => row.kind === "branch");
+
+    expect(renderRow(branch, { color: "red" }).element.hasAttribute("data-color")).toBe(false);
+  });
+
+  /** 選択と薄い表示の class は色と一緒に付く。どちらが勝つかは CSS の並び順 */
+  it("選択と薄い表示の class は色があっても付く", () => {
+    const heading = headingOf(rowsOf({ local: [makeBranch("main")] }));
+    const failed = flatten([makeErrorRepo("r1", "ディレクトリが見つかりません", "acme-api")], {
+      expanded: new Set<string>(),
+      query: "",
+      groupDirectories: true,
+      localOnly: false,
+    })[0]!;
+
+    expect(renderRow(heading, { color: "red", selected: true }).element.className).toContain(
+      styles.selected,
+    );
+    expect(renderRow(failed, { color: "red" }).element.className).toContain(styles.dimmed);
+  });
+});
+
 describe("括りとタグの行", () => {
   it("括りに件数を出さない", () => {
     const rows = rowsOf({ local: [makeBranch("main"), makeBranch("develop")] });
@@ -446,7 +493,42 @@ describe("実行中の行", () => {
 
     element.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
 
-    expect(element.className).toContain(styles.dimmed);
+    expect(element.className).toContain(styles.busy);
     expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 実行中は「ヒットなし・エラー」の薄い表示とは分ける。背景を塗り替えると、
+   * 一括フェッチの間じゅう見出しの色が消える (docs/adr/0024-repo-heading-color.md)
+   */
+  it("実行中の見出しは実行中の class だけ付け、色は残す", () => {
+    const repo = makeRepo("r1", { local: [makeBranch("main")] }, { running: true });
+    const rows = flatten([repo], {
+      expanded: new Set<string>(),
+      query: "",
+      groupDirectories: true,
+      localOnly: false,
+    });
+
+    const { element } = renderRow(rows[0]!, { color: "green" });
+
+    expect(element.className).toContain(styles.busy);
+    expect(element.className).not.toContain(styles.dimmed);
+    expect(element.getAttribute("data-color")).toBe("green");
+  });
+
+  it("実行中でもヒットが無ければ薄い表示になる", () => {
+    const repo = makeRepo("r1", { local: [makeBranch("main")] }, { running: true });
+    const rows = flatten([repo], {
+      expanded: new Set<string>(),
+      query: "みつからない語",
+      groupDirectories: true,
+      localOnly: false,
+    });
+
+    const { element } = renderRow(rows[0]!);
+
+    expect(element.className).toContain(styles.dimmed);
+    expect(element.className).toContain(styles.busy);
   });
 });

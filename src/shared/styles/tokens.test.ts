@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { REPO_COLORS } from "@/shared/lib/repoColors";
+
 import { CONSOLE_LINE_HEIGHT, ROW_HEIGHT } from "./rowHeight";
 
 const MOCK = fileURLToPath(new URL("../../../docs/mock/tree.tmpl.html", import.meta.url));
@@ -33,6 +35,12 @@ const TOKEN_NAMES = [
   "--head-sel",
   "--head-selfoc",
   "--head-nohit",
+  "--head-red",
+  "--head-orange",
+  "--head-yellow",
+  "--head-green",
+  "--head-blue",
+  "--head-purple",
   "--track",
   "--ahead",
   "--wt",
@@ -61,6 +69,8 @@ const TOKEN_NAMES = [
   "--btn-face",
   "--accent",
   "--accent-hover",
+  "--accent-fg",
+  "--ring",
   "--danger",
   "--danger-hover",
   "--danger-face",
@@ -215,6 +225,11 @@ describe("デザイントークン", () => {
 
   it("トークンの名前が想定どおり揃っている", () => {
     expect(Object.keys(mock).sort()).toEqual([...TOKEN_NAMES].sort());
+  });
+
+  /** 見出しの色を足したら、塗る値も要る (docs/adr/0024-repo-heading-color.md) */
+  it.each(REPO_COLORS)("見出しの色 %s にトークンがある", (color) => {
+    expect(mock[`--head-${color}`]).toMatch(/^#[0-9a-f]{6}$/);
   });
 
   it("仮想化に渡す行高が --row と一致する", () => {

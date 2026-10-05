@@ -14,6 +14,8 @@
 
 .box {
   width: 440px;
+  /* 詳細ペインを隠すとウィンドウを 360px まで細くできる。左右 16px を残す (docs/specs/ui.md) */
+  max-width: calc(100vw - 32px);
   padding: 0 0 14px;
   overflow: hidden;
   background: var(--panel);
@@ -63,7 +65,7 @@
 
 /*
  * 無効なボタン。**プライマリの地も外す。**
- * 濃い青の上に `--disabled` の文字を乗せると、押せるように見えて読めない
+ * プライマリの地の上に `--disabled` の文字を乗せると、押せるように見えて読めない
  */
 .buttons button[disabled],
 .buttons button[disabled]:hover {
@@ -73,13 +75,14 @@
   cursor: default;
 }
 
-.primary {
-  color: var(--fg-strong);
+/* `.buttons button` より特異性を上げる。負けると文字色が --fg になり、明るい地で読めない */
+.buttons .primary {
+  color: var(--accent-fg);
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.primary:hover {
+.buttons .primary:hover {
   background: var(--accent-hover);
 }
 

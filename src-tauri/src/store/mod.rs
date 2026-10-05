@@ -219,6 +219,9 @@ impl Registry {
         self.ui_state
             .expanded
             .retain(|key| known.iter().any(|id| key.starts_with(&format!("{id}|"))));
+        self.ui_state
+            .repo_colors
+            .retain(|id, _| known.contains(&id.as_str()));
     }
 
     /// Register a repository. `common_dir` decides whether it is a duplicate.
@@ -254,6 +257,7 @@ impl Registry {
         self.ui_state
             .expanded
             .retain(|key| !key.starts_with(&prefix));
+        self.ui_state.repo_colors.remove(id);
     }
 
     /// Registered repositories, in display order.
@@ -337,7 +341,10 @@ impl Registry {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
+    use crate::model::RepoColor;
 
     fn geometry(x: f64, y: f64, width: f64, height: f64) -> WindowState {
         WindowState {
@@ -503,6 +510,74 @@ mod tests {
         assert!(registry.registrations().is_empty());
         assert!(registry.ui_state().expanded.is_empty());
         assert!(registry.ui_state().repo_order.is_empty());
+    }
+
+    /// 削除するとその id の見出しの色も消える。他のリポジトリの色は残す
+    /// (docs/adr/0024-repo-heading-color.md)
+    #[test]
+    fn removing_a_repository_drops_its_colour() {
+        let (mut registry, id) = registry_with_one();
+        let other = registry
+            .add(
+                "acme-web".to_owned(),
+                PathBuf::from("/repos/acme-web"),
+                PathBuf::from("/repos/acme-web/.git"),
+            )
+            .expect("the second repository registers");
+        let mut ui_state = registry.ui_state().clone();
+        ui_state.repo_colors = BTreeMap::from([
+            (id.clone(), RepoColor::Red),
+            (other.clone(), RepoColor::Blue),
+        ])
+        .into();
+        registry.set_ui_state(ui_state);
+
+        registry.remove(&id);
+
+        assert_eq!(
+            *registry.ui_state().repo_colors,
+            BTreeMap::from([(other, RepoColor::Blue)])
+        );
+    }
+
+    /// フロントが送ってきた色でも、登録されていない id のものは捨てる。
+    /// 読み込み時も同じ (`prune` は `set_ui_state` と `load` の両方で通る)
+    #[test]
+    fn drops_colours_of_unknown_repositories() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("canopy.json");
+        let (mut registry, id) = registry_with_one();
+        let mut ui_state = registry.ui_state().clone();
+        ui_state.repo_colors = BTreeMap::from([
+            (id.clone(), RepoColor::Green),
+            ("r404".to_owned(), RepoColor::Purple),
+        ])
+        .into();
+
+        registry.set_ui_state(ui_state);
+
+        assert_eq!(
+            *registry.ui_state().repo_colors,
+            BTreeMap::from([(id.clone(), RepoColor::Green)])
+        );
+        registry.save(&path).expect("save should succeed");
+        let raw = std::fs::read_to_string(&path).expect("read");
+        let edited = raw.replace(
+            "\"repo_colors\": {",
+            "\"repo_colors\": {\n      \"r404\": \"purple\",",
+        );
+        assert!(
+            edited.contains("r404"),
+            "書き換えが当たっていない: {edited}"
+        );
+        std::fs::write(&path, edited).expect("write");
+
+        let loaded = Registry::load(&path).expect("load should succeed");
+
+        assert_eq!(
+            *loaded.ui_state().repo_colors,
+            BTreeMap::from([(id, RepoColor::Green)])
+        );
     }
 
     /// **`|` の境界で id を見る。** `r1` を消しても `r10` の鍵は残る。

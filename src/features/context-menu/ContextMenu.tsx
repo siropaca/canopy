@@ -145,6 +145,10 @@ function Row({ item, onRun, onHover }: RowProps) {
         onRun(item.action);
       }}
     >
+      {item.swatch !== undefined && (
+        // 見出しに塗る色そのもの。値は CSS 側がトークンで持つ
+        <span className={styles.swatch} data-swatch={item.swatch} aria-hidden="true" />
+      )}
       <span>{item.label}</span>
       {item.value !== undefined && <span className={styles.value}>{item.value}</span>}
     </button>

@@ -18,6 +18,8 @@ const SAVED: UiState = {
   console_open: true,
   group_directories: false,
   local_only: true,
+  detail_open: false,
+  repo_colors: { r1: "purple", r2: "green" },
 };
 
 describe("UI のストア", () => {
@@ -49,6 +51,45 @@ describe("UI のストア", () => {
     expect(state().groupDirectories).toBe(false);
     expect(state().localOnly).toBe(true);
     expect(state().consoleOpen).toBe(true);
+    expect(state().detailOpen).toBe(false);
+    expect([...state().repoColors].sort()).toEqual([
+      ["r1", "purple"],
+      ["r2", "green"],
+    ]);
+  });
+
+  /** 詳細パネルは既定で表示 (docs/specs/ui.md の「サイドバー」) */
+  it("詳細パネルは既定で表示、色は何も付いていない", () => {
+    expect(state().detailOpen).toBe(true);
+    expect(state().repoColors.size).toBe(0);
+  });
+
+  /**
+   * 開閉を変える入口は `store/detailPaneActions.ts` の 1 本。ストアに開閉だけを
+   * 切り替える操作を置くと、ウィンドウの下限を伝え忘れる呼び方ができる
+   */
+  it("詳細パネルの開閉だけを切り替える操作を持たない", () => {
+    expect(state()).not.toHaveProperty("toggleDetail");
+  });
+
+  /** 色は名前で持つ (docs/adr/0024-repo-heading-color.md) */
+  it("見出しの色を付け替える。他のリポジトリの色は触らない", () => {
+    state().setRepoColor("r1", "red");
+    state().setRepoColor("r2", "blue");
+
+    state().setRepoColor("r1", "yellow");
+
+    expect(state().repoColors.get("r1")).toBe("yellow");
+    expect(state().repoColors.get("r2")).toBe("blue");
+  });
+
+  /** `なし` は値として持たない。保存する形からも消える (docs/specs/data-model.md) */
+  it("色を外すと鍵ごと消える", () => {
+    state().setRepoColor("r1", "red");
+
+    state().setRepoColor("r1", null);
+
+    expect(state().repoColors.has("r1")).toBe(false);
   });
 
   it("開閉を切り替える。閉じたら配下も閉じる", () => {
@@ -144,7 +185,28 @@ describe("toUiState", () => {
       console_open: true,
       group_directories: false,
       local_only: true,
+      detail_open: false,
+      repo_colors: { r1: "purple", r2: "green" },
     });
+  });
+
+  /** 並びが違うだけの保存を作らない。Rust 側 (BTreeMap) と同じ文字コード順にする */
+  it("色の鍵の並びを揃える", () => {
+    const store = createUiStore();
+    store.getState().setRepoColor("r2", "blue");
+    store.getState().setRepoColor("r10", "red");
+    store.getState().setRepoColor("r1", "green");
+
+    expect(Object.keys(toUiState(store.getState(), []).repo_colors)).toEqual(["r1", "r10", "r2"]);
+  });
+
+  it("色を外したリポジトリは保存する形に入れない", () => {
+    const store = createUiStore();
+    store.getState().setRepoColor("r1", "orange");
+    store.getState().setRepoColor("r2", "blue");
+    store.getState().setRepoColor("r2", null);
+
+    expect(toUiState(store.getState(), []).repo_colors).toEqual({ r1: "orange" });
   });
 
   it("鍵の並びを揃える。順番だけ違う保存を作らない", () => {

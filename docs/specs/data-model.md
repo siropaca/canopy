@@ -251,11 +251,20 @@ git を 1 回実行した記録。コンソールの 1 ブロックに対応す�
 | `console_open` | コンソールの開閉 |
 | `group_directories` | ディレクトリのグループ化 |
 | `local_only` | ローカルのみ表示 |
+| `detail_open` | 詳細ペインの開閉。既定は表示 ([../adr/0025-hide-detail-pane.md](../adr/0025-hide-detail-pane.md)) |
+| `repo_colors` | リポジトリ見出しの色。リポジトリ id → 色の名前 ([../adr/0024-repo-heading-color.md](../adr/0024-repo-heading-color.md)) |
 
 **ウィンドウの位置とサイズは `UiState` に入れない。**  
 `UiState` はフロントと共有する DTO で、位置とサイズを知っているのは Rust 側だけ ([../adr/0011-residency.md](../adr/0011-residency.md))。  
 混ぜると「フロントが送っても捨てられるフィールド」になり、フロントからウィンドウを動かす機能を足したときに無言で効かなくなる。  
 設定ファイルでは `ui_state` と並びの `window` に置く (`terminal_app` と同じ扱い)。
+
+**`repo_colors` は色の名前で持つ。** 値は `red` / `orange` / `yellow` / `green` / `blue` / `purple`。  
+色を付けていないリポジトリは入れない (`なし` を値として持たない)。  
+知らない名前は読み捨て、リストから消したリポジトリの色は `expanded` と同じく捨てる。  
+理由は [../adr/0024-repo-heading-color.md](../adr/0024-repo-heading-color.md)。
+
+`detail_open` は起動時に Rust も読む。ウィンドウの幅の下限をこれで決めるため ([ui.md](ui.md) の「ウィンドウと常駐」)。
 
 保存するのは「開いているキー」にする。折りたたんでいるキーではない。
 

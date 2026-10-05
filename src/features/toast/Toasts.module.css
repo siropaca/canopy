@@ -13,7 +13,8 @@
 .toast {
   display: flex;
   min-width: 300px;
-  max-width: 560px;
+  /* ウィンドウに収める。右の余白 12px と同じだけ左にも残す (docs/specs/ui.md) */
+  max-width: min(560px, calc(100vw - 24px));
   align-items: center;
   padding: 11px 16px;
   border-radius: 8px;
@@ -28,7 +29,7 @@
   flex: 0 0 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--fg-strong);
+  color: var(--accent-fg);
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
@@ -37,6 +38,7 @@
 
 .toast.failure .icon {
   background: var(--err);
+  color: var(--fg-strong);
 }
 
 .message {

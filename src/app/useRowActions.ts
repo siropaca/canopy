@@ -222,6 +222,15 @@ export function useRowActions(rows: readonly RowNode[]): RowActions {
         case "copy":
           void copyToClipboard(row.repoId, action.text);
           return;
+        case "setColor": {
+          // git を実行しない。保存は store/persist.ts がまとめて行う
+          const ui = useUiStore.getState();
+          ui.setRepoColor(row.repoId, action.color);
+          // 右クリックした見出しは選択中で、選択の色が見出しの色より勝つ。
+          // 外さないと何色になったかが見えない (docs/adr/0024-repo-heading-color.md)
+          ui.select(null);
+          return;
+        }
       }
     },
     [openPush, openRename, openDelete],

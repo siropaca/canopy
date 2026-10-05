@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -14,11 +14,20 @@ vi.mock("@/store/events");
 vi.mock("@/store/persist");
 vi.mock("@/store/refresh");
 vi.mock("@/store/opsActions");
+vi.mock("@/ipc/window");
 
 vi.mock("@/features/repo-tree/RepoTree", () => ({
   RepoTree: () => <div data-testid="tree" />,
-  TreePane: ({ children }: { readonly children: React.ReactNode }) => (
-    <div data-testid="tree-pane">{children}</div>
+  TreePane: ({
+    fill,
+    children,
+  }: {
+    readonly fill: boolean;
+    readonly children: React.ReactNode;
+  }) => (
+    <div data-testid="tree-pane" data-fill={String(fill)}>
+      {children}
+    </div>
   ),
 }));
 
@@ -27,6 +36,7 @@ import { flatten } from "@/shared/lib/flattenTree";
 import { allKeysOf } from "@/shared/lib/treeKeys";
 import { makeBranch, makeRepo } from "@/test/factories";
 import * as bootstrap from "@/store/bootstrap";
+import * as windowIpc from "@/ipc/window";
 import * as events from "@/store/events";
 import * as ops from "@/store/opsActions";
 import * as refresh from "@/store/refresh";
@@ -74,6 +84,8 @@ beforeEach(() => {
     running: new Map(),
   });
   useUiStore.getState().select(null);
+  useUiStore.setState({ detailOpen: true });
+  vi.mocked(windowIpc.setDetailOpen).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -104,10 +116,113 @@ describe("サイドバーの配線", () => {
   it("フェッチを押しても取り直しだけにはならない", () => {
     render(<App />);
 
-    screen.getByLabelText("フェッチ").click();
+    screen.getByLabelText("フェッチ (すべて)").click();
 
     expect(ops.fetchAllRepositories).toHaveBeenCalledOnce();
     expect(refresh.refreshAllRepositories).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 名前に出した対象と、実際にフェッチする対象を揃える
+   * (docs/adr/0026-clear-selection-on-empty-area.md)
+   */
+  it("ブランチを選んでいると、名前がそのリポジトリになり、そのリポジトリだけをフェッチする", () => {
+    selectBranch("side");
+    render(<App />);
+
+    screen.getByLabelText("フェッチ (acme-api)").click();
+
+    expect(ops.fetchRepository).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(ops.fetchAllRepositories).not.toHaveBeenCalled();
+  });
+
+  /** 対象は「画面に見えている選択」で決める (docs/specs/ui.md の「詳細ペイン」) */
+  it("選んだ行を畳んで隠すと、名前が すべて になり、全リポジトリをフェッチする", () => {
+    selectBranch("side");
+    useUiStore.getState().setExpanded([]);
+    render(<App />);
+
+    screen.getByLabelText("フェッチ (すべて)").click();
+
+    expect(ops.fetchAllRepositories).toHaveBeenCalledOnce();
+    expect(ops.fetchRepository).not.toHaveBeenCalled();
+  });
+
+  it("選択を外すと、名前が すべて に戻り、全リポジトリをフェッチする", () => {
+    selectBranch("side");
+    render(<App />);
+
+    act(() => {
+      useUiStore.getState().select(null);
+    });
+    screen.getByLabelText("フェッチ (すべて)").click();
+
+    expect(ops.fetchAllRepositories).toHaveBeenCalledOnce();
+    expect(ops.fetchRepository).not.toHaveBeenCalled();
+  });
+});
+
+/** 詳細ペインを隠す (docs/adr/0025-hide-detail-pane.md) */
+describe("詳細パネルの配線", () => {
+  it("押すと詳細ペインとスプリッタが消え、隠したことを Rust に伝える", async () => {
+    render(<App />);
+    expect(screen.getByText("ブランチを選択")).toBeDefined();
+    expect(screen.getByRole("separator")).toBeDefined();
+    expect(screen.getByTestId("tree-pane").dataset.fill).toBe("false");
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText("詳細パネル"));
+    });
+
+    expect(screen.queryByText("ブランチを選択")).toBeNull();
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(screen.getByTestId("tree-pane").dataset.fill).toBe("true");
+    // 要求は直列にしているので、前の要求 (無し) を待ってから送る
+    await vi.waitFor(() => {
+      expect(vi.mocked(windowIpc.setDetailOpen).mock.calls).toEqual([[false]]);
+    });
+  });
+
+  it("もう一度押すと戻り、表示したことを伝える", async () => {
+    render(<App />);
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText("詳細パネル"));
+    });
+    act(() => {
+      fireEvent.click(screen.getByLabelText("詳細パネル"));
+    });
+
+    expect(screen.getByText("ブランチを選択")).toBeDefined();
+    expect(screen.getByRole("separator")).toBeDefined();
+    await vi.waitFor(() => {
+      expect(vi.mocked(windowIpc.setDetailOpen).mock.calls).toEqual([[false], [true]]);
+    });
+  });
+
+  /** サイドバーの見た目は App が渡す開閉で決まる */
+  it("押すとサイドバーのボタンも押していない見た目に変わる", () => {
+    render(<App />);
+    const shown = screen.getByLabelText("詳細パネル").className;
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText("詳細パネル"));
+    });
+
+    expect(screen.getByLabelText("詳細パネル").className).not.toBe(shown);
+    expect(screen.getByLabelText("詳細パネル").className).toBe(
+      screen.getByLabelText("コンソール").className,
+    );
+  });
+
+  /** 保存してあった状態で起動したときも、隠したまま描く */
+  it("隠した状態で読み込んだら、最初から詳細ペインを出さない", () => {
+    useUiStore.setState({ detailOpen: false });
+
+    render(<App />);
+
+    expect(screen.queryByText("ブランチを選択")).toBeNull();
+    expect(screen.queryByRole("separator")).toBeNull();
   });
 });
 

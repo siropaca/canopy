@@ -106,6 +106,7 @@ detached はどのブランチにも紐づけられないので載せない ([da
 | ターミナルで開く | `open_in_terminal` | `open -a <アプリ> <パス>`。アプリ名は設定に持つ |
 | プッシュ前のコミット一覧 | `get_push_preview` | `git log <上流>..<名前>` と逆向きを取る。スナップショットには載せない |
 | UI 状態の保存 | `save_ui_state` | まとめて保存する (デバウンス)。**並び順もこれ 1 本で保存する** |
+| 詳細ペインの開閉 | `set_detail_open` | ウィンドウの幅の下限を 720px / 360px で切り替え、表示に戻すときに狭ければ 720px に広げる。**開閉の保存はしない** (`save_ui_state` が持つ)。フロントは要求を直列に送る ([../adr/0025-hide-detail-pane.md](../adr/0025-hide-detail-pane.md)) |
 
 コピー系はフロントで `navigator.clipboard.writeText` を使う。IPC を通さない。  
 失敗したらトーストで知らせる。黙って落とさない。

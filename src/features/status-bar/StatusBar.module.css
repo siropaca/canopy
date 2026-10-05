@@ -11,6 +11,9 @@
   font-size: 12px;
   line-height: 20px;
   font-variant-numeric: tabular-nums;
+  /* 1 行の高さで固定している。幅が足りなければ折り返さずに右を切る (docs/specs/ui.md) */
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* 実行中。**集計より先に出す** (docs/adr/0023-progress-in-the-status-bar.md) */

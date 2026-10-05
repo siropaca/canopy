@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { REPO_COLORS } from "@/shared/lib/repoColors";
+
 /*
  * モックと実装の CSS を突き合わせる。
  *
@@ -23,6 +25,7 @@ const VISUAL = [
   "padding",
   "padding-left",
   "padding-right",
+  "padding-bottom",
   "margin",
   "margin-left",
   "gap",
@@ -36,6 +39,7 @@ const VISUAL = [
   "border-top",
   "border-bottom",
   "border-right",
+  "border-color",
   "border-radius",
   "box-shadow",
   "min-width",
@@ -51,6 +55,11 @@ const VISUAL = [
   // (docs/adr/0023-progress-in-the-status-bar.md)
   "animation",
   "transform-origin",
+  // 詳細ペインを隠したときに広がるのと、細いウィンドウで折り返さないのは
+  // この 3 つで決まる (docs/adr/0025-hide-detail-pane.md)
+  "flex",
+  "white-space",
+  "overflow",
 ] as const;
 
 interface Pair {
@@ -97,10 +106,22 @@ const PAIRS: readonly Pair[] = [
     rule: ".row.heading.dimmed .name",
   },
   {
+    mock: ".r.repo.busy",
+    module: "features/repo-tree/TreeRow.module.css",
+    rule: ".row.heading.busy",
+  },
+  {
     mock: ".r.repo.dragging",
     module: "features/repo-tree/TreeRow.module.css",
     rule: ".row.dragging",
   },
+  // 見出しの色 (docs/adr/0024-repo-heading-color.md)。色の一覧から回すので、色を足すと
+  // モックと実装の両方にルールが無い限り落ちる
+  ...REPO_COLORS.map((color): Pair => ({
+    mock: `.r.repo[data-color="${color}"]`,
+    module: "features/repo-tree/TreeRow.module.css",
+    rule: `.row.heading[data-color="${color}"]`,
+  })),
   { mock: ".badge", module: "features/repo-tree/TreeRow.module.css", rule: ".badge" },
   { mock: ".badge svg", module: "features/repo-tree/TreeRow.module.css", rule: ".badge svg" },
   { mock: ".badge.d", module: "features/repo-tree/TreeRow.module.css", rule: ".badgeDirty" },
@@ -128,6 +149,7 @@ const PAIRS: readonly Pair[] = [
       // モックはツリーごと `overflow:auto` にして sticky で貼り付けているが、
       // 実装はペインを縦の flex にして検索欄を固定枠に置く (仮想化のため)
       "align-items": "実装は flex で組んでいる",
+      flex: "実装は縦の flex の中で検索欄を縮めない",
     },
   },
   {
@@ -184,7 +206,15 @@ const PAIRS: readonly Pair[] = [
 
   // ---- 詳細ペイン ----
   // 実装はスクロール領域を分けているので、余白を持つのは中身の側
-  { mock: ".detail", module: "features/detail/DetailPane.module.css", rule: ".body" },
+  {
+    mock: ".detail",
+    module: "features/detail/DetailPane.module.css",
+    rule: ".body",
+    ignore: {
+      flex: "広がるのは外側の .pane (スクロール領域を分けている)",
+      overflow: "スクロールするのは外側の自前スクロールバーの器",
+    },
+  },
   { mock: ".detail h1", module: "features/detail/DetailPane.module.css", rule: ".title" },
   { mock: ".detail .sub", module: "features/detail/DetailPane.module.css", rule: ".subtitle" },
   { mock: ".kv", module: "features/detail/DetailPane.module.css", rule: ".pairs" },
@@ -213,7 +243,11 @@ const PAIRS: readonly Pair[] = [
     module: "features/console/ConsolePanel.module.css",
     rule: ".body",
     // 実装は中に自前スクロールバーの器を入れるので、縮められるようにする
-    ignore: { "min-height": "実装は中の器を縮めるために必要" },
+    ignore: {
+      "min-height": "実装は中の器を縮めるために必要",
+      overflow: "スクロールするのは中の自前スクロールバーの器",
+      "white-space": "実装は 1 行ずつの要素 (.command / .plain / .error) で折り返す",
+    },
   },
   {
     mock: ".console .empty2",
@@ -261,6 +295,17 @@ const PAIRS: readonly Pair[] = [
   },
   { mock: ".menu .mi.off", module: "features/context-menu/ContextMenu.module.css", rule: ".off" },
   { mock: ".menu .hr", module: "features/context-menu/ContextMenu.module.css", rule: ".separator" },
+  // 見出しの色の見本 (docs/adr/0024-repo-heading-color.md)
+  {
+    mock: ".menu .mi .sw",
+    module: "features/context-menu/ContextMenu.module.css",
+    rule: ".swatch",
+  },
+  ...["none", ...REPO_COLORS].map((swatch): Pair => ({
+    mock: `.menu .mi .sw[data-swatch="${swatch}"]`,
+    module: "features/context-menu/ContextMenu.module.css",
+    rule: `.swatch[data-swatch="${swatch}"]`,
+  })),
 
   // ---- ダイアログ ----
   { mock: ".modal", module: "features/dialog/Dialog.module.css", rule: ".overlay" },
@@ -272,6 +317,18 @@ const PAIRS: readonly Pair[] = [
     mock: ".modal .btns button",
     module: "features/dialog/Dialog.module.css",
     rule: ".buttons button",
+  },
+  // `.buttons button` より特異性を上げる。`.primary` だけだと文字色と枠が
+  // `.buttons button` に負け、明るい地に白い文字が乗って読めなくなる
+  {
+    mock: ".modal .btns button.pri",
+    module: "features/dialog/Dialog.module.css",
+    rule: ".buttons .primary",
+  },
+  {
+    mock: ".modal .btns button.pri:hover",
+    module: "features/dialog/Dialog.module.css",
+    rule: ".buttons .primary:hover",
   },
   // 削除のダイアログ。破壊的な選択の注意 (docs/adr/0021-delete-local-branch.md)
   {
@@ -294,6 +351,12 @@ const PAIRS: readonly Pair[] = [
   { mock: "svg.dt", module: "shared/ui/icons.module.css", rule: ".dot" },
   { mock: "svg.wti", module: "shared/ui/icons.module.css", rule: ".worktree" },
   { mock: "svg.sp", module: "shared/ui/icons.module.css", rule: ".spinner" },
+
+  // ---- 最後の行の下の余白。選択を外すために押す所 (docs/adr/0026) ----
+  { mock: "#rows", module: "features/repo-tree/RepoTree.module.css", rule: ".layer" },
+
+  // ---- 詳細ペインを隠したときのツリー (docs/adr/0025-hide-detail-pane.md) ----
+  { mock: ".treepane.fill", module: "features/repo-tree/RepoTree.module.css", rule: ".pane.fill" },
 
   // ---- スプリッタ ----
   { mock: ".splitter", module: "shared/ui/Splitter.module.css", rule: ".splitter" },
@@ -443,6 +506,7 @@ describe("比べる範囲", () => {
       "padding",
       "padding-left",
       "padding-right",
+      "padding-bottom",
       "margin",
       "margin-left",
       "gap",
@@ -456,6 +520,7 @@ describe("比べる範囲", () => {
       "border-top",
       "border-bottom",
       "border-right",
+      "border-color",
       "border-radius",
       "box-shadow",
       "min-width",
@@ -469,12 +534,15 @@ describe("比べる範囲", () => {
       "stroke",
       "animation",
       "transform-origin",
+      "flex",
+      "white-space",
+      "overflow",
     ]);
   });
 
   it("モックの class を 1 つずつ対応させてある", () => {
     // 減らせば差分は出なくなる。組数を固定して、外したら落とす
-    expect(PAIRS).toHaveLength(77);
+    expect(PAIRS).toHaveLength(96);
   });
 });
 

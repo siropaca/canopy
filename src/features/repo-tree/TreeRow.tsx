@@ -1,5 +1,6 @@
 import { memo } from "react";
 
+import type { RepoColor } from "@/ipc/generated/RepoColor";
 import type { RepoRow, RowNode } from "@/ipc/types";
 import { classNames } from "@/shared/lib/classNames";
 import { headNote } from "@/shared/lib/headLabel";
@@ -37,6 +38,11 @@ interface TreeRowProps {
   readonly onContextMenu: (row: RowNode, at: { readonly x: number; readonly y: number }) => void;
   /** ドラッグで掴んでいる行か。薄くする (docs/specs/ui.md) */
   readonly dragging?: boolean;
+  /**
+   * 見出しの色 (docs/adr/0024-repo-heading-color.md)。リポジトリ見出しだけに効く。
+   * 塗るのは CSS で、選択と薄い表示はその上に乗る
+   */
+  readonly color?: RepoColor | null;
 }
 
 export const TreeRow = memo(function TreeRow({
@@ -47,15 +53,18 @@ export const TreeRow = memo(function TreeRow({
   onActivate,
   onContextMenu,
   dragging = false,
+  color = null,
 }: TreeRowProps) {
-  // 実行中の行は薄くする。スピナーは出さない (docs/specs/ui.md の「実行中の扱い」)
-  const dimmed =
-    row.running || (row.kind === "repo" && (row.repo.status === "error" || !row.matched));
+  // 読めない・検索に当たらない見出しは、背景ごと薄くする
+  const dimmed = row.kind === "repo" && (row.repo.status === "error" || !row.matched);
   const className = classNames(
     styles.row,
     row.kind === "repo" && styles.heading,
     selected && styles.selected,
     dimmed && styles.dimmed,
+    // 実行中の行は文字だけ薄くする。スピナーは出さない (docs/specs/ui.md の「実行中の扱い」)。
+    // 背景を塗り替えると見出しの色が消える (docs/adr/0024-repo-heading-color.md)
+    row.running && styles.busy,
     dragging && styles.dragging,
   );
 
@@ -64,6 +73,7 @@ export const TreeRow = memo(function TreeRow({
       className={className}
       data-depth={row.depth}
       data-kind={row.kind}
+      data-color={row.kind === "repo" && color !== null ? color : undefined}
       onMouseDown={() => {
         onSelect(row.key);
       }}

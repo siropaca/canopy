@@ -22,11 +22,13 @@ function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     pullEnabled: false,
     fetchEnabled: true,
+    fetchTarget: null,
     removeEnabled: false,
     deleteEnabled: false,
     groupDirectories: true,
     localOnly: false,
     consoleOpen: false,
+    detailOpen: true,
     onRefresh: vi.fn(),
     onFetch: vi.fn(),
     onPull: vi.fn(),
@@ -39,6 +41,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}) {
     onToggleGroup: vi.fn(),
     onToggleLocalOnly: vi.fn(),
     onToggleConsole: vi.fn(),
+    onToggleDetail: vi.fn(),
     ...overrides,
   };
   render(<Sidebar {...props} />);
@@ -112,7 +115,7 @@ describe("サイドバー", () => {
   it("ボタンは title 属性を持たない", () => {
     renderSidebar();
 
-    expect(button("フェッチ").getAttribute("title")).toBeNull();
+    expect(button("フェッチ (すべて)").getAttribute("title")).toBeNull();
   });
 
   it("プルの有効条件は呼び出し側が決める", () => {
@@ -162,7 +165,7 @@ describe("サイドバー", () => {
   it("フェッチとプルはそれぞれのハンドラを呼ぶ", () => {
     const props = renderSidebar({ pullEnabled: true });
 
-    button("フェッチ").click();
+    button("フェッチ (すべて)").click();
     button("選択対象をプル").click();
 
     expect(props.onFetch).toHaveBeenCalledOnce();
@@ -198,7 +201,77 @@ describe("サイドバー", () => {
   it("フェッチは呼び出し側が無効にできる (一括フェッチの最中)", () => {
     renderSidebar({ fetchEnabled: false });
 
-    expect(button("フェッチ").disabled).toBe(true);
+    expect(button("フェッチ (すべて)").disabled).toBe(true);
+  });
+
+  /**
+   * 選択の有無で対象が変わるので、押す前に分かるようにする
+   * (docs/adr/0026-clear-selection-on-empty-area.md)
+   */
+  it("フェッチの名前に対象を出す。選択が無ければ すべて", () => {
+    renderSidebar({ fetchTarget: null });
+
+    hover(button("フェッチ (すべて)"));
+
+    expect(screen.getByRole("tooltip").textContent).toBe("フェッチ (すべて)");
+  });
+
+  it("リポジトリが対象ならその名前を出す", () => {
+    const props = renderSidebar({ fetchTarget: "acme-api" });
+
+    hover(button("フェッチ (acme-api)"));
+    button("フェッチ (acme-api)").click();
+
+    expect(screen.getByRole("tooltip").textContent).toBe("フェッチ (acme-api)");
+    expect(props.onFetch).toHaveBeenCalledOnce();
+  });
+
+  /** 詳細ペインを隠す (docs/adr/0025-hide-detail-pane.md) */
+  it("詳細パネルを押すと切り替えを起こす", () => {
+    const props = renderSidebar();
+
+    button("詳細パネル").click();
+
+    expect(props.onToggleDetail).toHaveBeenCalledOnce();
+    expect(props.onToggleConsole).not.toHaveBeenCalled();
+  });
+
+  it("詳細パネルは出しているあいだ押している見た目になる", () => {
+    renderSidebar({ detailOpen: true, consoleOpen: false });
+    const shown = button("詳細パネル").className;
+    const off = button("コンソール").className;
+
+    expect(shown).not.toBe(off);
+  });
+
+  it("隠しているあいだは押していない見た目になる", () => {
+    renderSidebar({ detailOpen: false, consoleOpen: false });
+
+    expect(button("詳細パネル").className).toBe(button("コンソール").className);
+  });
+
+  /** 並びは docs/specs/ui.md の「サイドバー」の表のとおり */
+  it("ボタンの並びが仕様どおり。詳細パネルはコンソールの下", () => {
+    renderSidebar();
+
+    const labels = screen.getAllByRole("button").map((found) => found.getAttribute("aria-label"));
+
+    expect(labels).toEqual([
+      "新規ブランチ (v2)",
+      "ブランチの削除",
+      "更新",
+      "フェッチ (すべて)",
+      "選択対象をプル",
+      "すべて展開 (ローカルのみ)",
+      "すべて展開",
+      "すべて折りたたむ",
+      "グループ化 ディレクトリ",
+      "ローカルのみ表示",
+      "リポジトリを追加",
+      "リポジトリをリストから削除",
+      "コンソール",
+      "詳細パネル",
+    ]);
   });
 
   it("トグルは状態を見た目に出す", () => {
