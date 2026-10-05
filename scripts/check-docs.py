@@ -37,6 +37,7 @@ BANNED = [
     ("CSP で無効になる書き方を書けなく", "React の style prop は CSSOM 経由なので CSP では止まらない"),
     ("fetch origin <名前>:<名前>", "リモートは追跡先から取る。origin 決め打ちだと別のブランチの中身で上書きする"),
     ("--force-with-lease=<名前>:<sha>", "リースの参照名はリモート側のブランチ名。`<名前>` だと origin/main 形と混ざる"),
+    ("詳細ペインは常に表示する", "フェーズ 7 で隠せるようにした (ADR-0025)"),
 ]
 BANNED_EXCEPT = {
     "作業ツリー": ["docs/specs/ui.md"],          # IDEA のメニュー文言
@@ -59,6 +60,8 @@ BANNED_EXCEPT = {
     # 罠として「こう書くな」を説明している箇所は除く
     "fetch origin <名前>:<名前>": ["scripts/check-docs.py", "docs/pitfalls.md"],
     "--force-with-lease=<名前>:<sha>": ["scripts/check-docs.py"],
+    # 見直す前の決定として引いている箇所は除く
+    "詳細ペインは常に表示する": ["scripts/check-docs.py", "docs/adr/0025-hide-detail-pane.md"],
 }
 
 problems = []

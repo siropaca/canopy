@@ -56,7 +56,7 @@ canopy/
 │   ├── src/
 │   │   ├── main.rs             エントリ。lib の run() を呼ぶだけ
 │   │   ├── lib.rs              Tauri の Builder。統合テストからも呼べるように lib にしている
-│   │   ├── commands/           #[tauri::command] の定義 (settings / snapshot / ops)
+│   │   ├── commands/           #[tauri::command] の定義 (settings / snapshot / ops / window)
 │   │   ├── git/                コマンド組み立て、実行、パース、引数の型付けと検証、子プロセスの後始末
 │   │   ├── model/              serde の DTO
 │   │   ├── store/              設定の読み書き、id → パスの解決
@@ -67,7 +67,7 @@ canopy/
 │   │   ├── state.rs            コマンドが共有する状態 (設定・キュー・ウィンドウ)
 │   │   ├── tray.rs             メニューバーのアイコンとメニュー
 │   │   ├── watch.rs            `.git` の監視。変わったリポジトリをまとめて知らせる
-│   │   └── window.rs           ウィンドウの位置とサイズ、隠す / 戻す
+│   │   └── window.rs           ウィンドウの位置とサイズ、隠す / 戻す、詳細ペインの開閉に合わせた幅の下限
 │   ├── capabilities/           Tauri の権限 (docs/security.md)
 │   ├── icons/                  アプリアイコン。scripts/gen-icon.py で作る
 │   ├── tauri.conf.json         ウィンドウ、CSP、バンドルの設定
@@ -135,7 +135,7 @@ features の `useEffect` で購読すると、`revision` の比較を通す場�
 操作ごとに書くと、どれか 1 つだけコンソールに出ない、という壊れ方をする。  
 一括フェッチの集約 (11 件を 1 件のトーストにまとめる) も同じ場所で行う。
 
-git の結果ではない失敗 (設定の保存、更新の通知の購読) は `store/notify.ts` を通す。  
+git の結果ではない失敗 (設定の保存、更新の通知の購読、詳細ペインの開閉に合わせたウィンドウの幅の変更) は `store/notify.ts` を通す。  
 `results.ts` は `CommandResult` 専用なので、ここを分けないとトーストのストアを直接叩く場所が features ごとに増える。
 
 読み取りと書き込みを混ぜない。  

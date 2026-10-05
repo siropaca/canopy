@@ -38,5 +38,9 @@
 | [0021](0021-delete-local-branch.md) | ローカルブランチの削除を v1 に入れる | 採用 |
 | [0022](0022-auto-refresh.md) | 変更を自分で見つけて取り直す | 採用 |
 | [0023](0023-progress-in-the-status-bar.md) | 実行中をステータスバーに出す | 採用 |
+| [0024](0024-repo-heading-color.md) | リポジトリ見出しに色を付けられるようにする | 採用 |
+| [0025](0025-hide-detail-pane.md) | 詳細ペインを隠せるようにする | 採用 |
+| [0026](0026-clear-selection-on-empty-area.md) | ツリーの空いた所を押すと選択を外す | 採用 |
+| [0027](0027-neutral-dark-palette.md) | 面と文字の色を青みのないグレーに揃える | 採用 |
 
 新しい ADR を足したらこの表にも追記する。
